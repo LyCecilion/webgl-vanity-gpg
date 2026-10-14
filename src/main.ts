@@ -3,7 +3,7 @@ import {
     readPrivateKey,
     reformatKey,
     SecretSubkeyPacket,
-} from 'openpgp/lightweight';
+} from 'openpgp';
 import { TarWriter } from '@gera2ld/tarjs';
 import { patternToFilter, createVanityKey } from './vanity-key.ts';
 import tadaData from './tada.ogg?inline';
@@ -14,7 +14,7 @@ import {
     KeyPair,
     Subkey,
     UserID,
-} from 'openpgp/lightweight';
+} from 'openpgp';
 import 'terminal.css';
 
 const tada = new Audio(tadaData);

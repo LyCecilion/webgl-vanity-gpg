@@ -2,12 +2,12 @@ import {
     generateKey,
     readPrivateKey,
     reformatKey,
-} from 'openpgp/lightweight';
+} from 'openpgp';
 import type {
     KeyOptions,
     KeyPair,
     PrivateKey,
-} from 'openpgp/lightweight';
+} from 'openpgp';
 
 import vshaderString from './vshader.glsl?raw';
 import fshaderString from './fshader.glsl?raw';
