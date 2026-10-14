@@ -1,11 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { enums, readPrivateKey, SecretSubkeyPacket, UserIDPacket } from 'openpgp';
 import { generateCandidate, rawPacket, signPacket, opaquePacket, fullConfig } from '../src/openpgp-packets.ts';
 import { createPrimaryDocument, appendSubkeys, renewKey } from '../src/key-lifecycle.ts';
 import { importKeyDocument, armorKeyDocument, armorPublicDocument, encodePackets, scanPacketFrames, applyPacketEdits } from '../src/key-document.ts';
 import { keyring } from './gpg.ts';
+import { exportDeviceKey } from '../src/device-export.ts';
 
 const primaryPassword = 'fixture primary passphrase';
 const subPassword = 'fixture subkey passphrase';
@@ -265,4 +268,105 @@ test('future self-signatures cannot win renewal and unknown critical metadata fa
     await assert.rejects(renewKey(criticalDocument, [copy.getFingerprint()], expiration(40), primaryPassword), /Unknown critical/);
     assert.deepEqual(criticalDocument.bytes, criticalBytes);
     rawPacket(copy.keyPacket).clearPrivateParams();
+});
+
+test('device export isolates actual secret files and supports only selected S/E in GnuPG', async t => {
+    const { complete, signing, encryption } = await fixture();
+    const extra = await generateCandidate('signing', new Date(Date.now() - 1000));
+    const document = await appendSubkeys(complete, [extra], expiration(20), primaryPassword, protectedSub);
+    const saved = document.bytes.slice();
+    const devicePassword = 'separate device passphrase';
+    const deviceArmor = await exportDeviceKey(document, [signing, encryption], { [signing]: subPassword, [encryption]: subPassword }, { passphrase: devicePassword, allowUnprotected: false });
+    assert.deepEqual(document.bytes, saved);
+    const deviceDocument = await importKeyDocument(deviceArmor);
+    assert.deepEqual(deviceDocument.key.getKeys().map(k => k.getFingerprint()), document.key.getKeys().map(k => k.getFingerprint()));
+    assert.equal(deviceDocument.key.keyPacket.isDummy(), true);
+    for (const subkey of deviceDocument.key.subkeys) {
+        assert.equal(subkey.keyPacket.isDummy(), ![signing, encryption].includes(subkey.getFingerprint()));
+        assert.equal(rawPacket(subkey.keyPacket).isDecrypted(), false);
+    }
+    const beforeNonSecrets = document.frames.filter(f => f.tag !== 5 && f.tag !== 7).map(f => Buffer.from(document.bytes.subarray(f.start, f.end)));
+    const afterNonSecrets = deviceDocument.frames.filter(f => f.tag !== 5 && f.tag !== 7).map(f => Buffer.from(deviceDocument.bytes.subarray(f.start, f.end)));
+    assert.deepEqual(afterNonSecrets, beforeNonSecrets);
+    const device = await keyring(t);
+    const publicRing = await keyring(t);
+    assert.equal(device.gpg(['--import'], deviceArmor).status, 0);
+    assert.equal(publicRing.gpg(['--import'], armorPublicDocument(document)).status, 0);
+    const packetPath = await device.file('device.asc', deviceArmor);
+    assert.ok(device.gpg(['--list-packets', packetPath]).stdout.includes('gnu-dummy'));
+    const listing = device.gpg(['--with-colons', '--with-keygrip', '--with-subkey-fingerprint', '--list-keys']);
+    const grips: Record<string, string> = {};
+    let fingerprint = '';
+    for (const row of listing.stdout.split('\n').map(line => line.split(':'))) {
+        if (row[0] === 'fpr') fingerprint = row[9].toLowerCase();
+        if (row[0] === 'grp') grips[fingerprint] = row[9];
+    }
+    const files = await readdir(join(device.home, 'private-keys-v1.d'));
+    assert.deepEqual(files.sort(), [signing, encryption].map(fp => `${grips[fp]}.key`).sort());
+    const message = 'Only the selected device subkeys can use this message.\n';
+    const messagePath = await device.file('message.txt', message);
+    const signaturePath = await device.file('message.sig', '');
+    const wrong = device.gpg(['--pinentry-mode', 'loopback', '--passphrase-fd', '0', '--local-user', `${signing}!`, '--output', signaturePath, '--yes', '--detach-sign', messagePath], 'wrong device password\n');
+    assert.notEqual(wrong.status, 0, 'wrong password must fail before the agent caches any key');
+    const primaryAttempt = device.gpg(['--pinentry-mode', 'loopback', '--passphrase-fd', '0', '--local-user', `${document.key.getFingerprint()}!`, '--output', signaturePath, '--yes', '--detach-sign', messagePath], `${devicePassword}\n`);
+    assert.notEqual(primaryAttempt.status, 0);
+    const unselectedAttempt = device.gpg(['--pinentry-mode', 'loopback', '--passphrase-fd', '0', '--local-user', `${extra.fingerprint}!`, '--output', signaturePath, '--yes', '--detach-sign', messagePath], `${devicePassword}\n`);
+    assert.notEqual(unselectedAttempt.status, 0);
+    const signed = device.gpg(['--pinentry-mode', 'loopback', '--passphrase-fd', '0', '--local-user', `${signing}!`, '--output', signaturePath, '--yes', '--detach-sign', messagePath], `${devicePassword}\n`);
+    assert.equal(signed.status, 0, signed.stderr);
+    const verified = publicRing.gpg(['--status-fd', '1', '--verify', signaturePath, messagePath]);
+    assert.equal(verified.status, 0, verified.stderr);
+    assert.ok(verified.stdout.includes(`VALIDSIG ${signing.toUpperCase()}`));
+    const encryptedPath = await publicRing.file('message.gpg', '');
+    const plaintext = await publicRing.file('message.txt', message);
+    const encrypted = publicRing.gpg(['--trust-model', 'always', '--recipient', `${encryption}!`, '--output', encryptedPath, '--yes', '--encrypt', plaintext]);
+    assert.equal(encrypted.status, 0, encrypted.stderr);
+    const decrypted = device.gpg(['--pinentry-mode', 'loopback', '--passphrase-fd', '0', '--decrypt', encryptedPath], `${devicePassword}\n`);
+    assert.equal(decrypted.status, 0, decrypted.stderr);
+    assert.equal(decrypted.stdout, message);
+});
+
+test('invalid device selections and missing/wrong secrets fail without mutating the certificate', async () => {
+    const { complete, signing, encryption } = await fixture();
+    const before = complete.bytes.slice();
+    const passphrases = { [signing]: subPassword, [encryption]: subPassword };
+    for (const selection of [[], [complete.key.getFingerprint()], [signing, signing], ['0'.repeat(40)]]) {
+        await assert.rejects(exportDeviceKey(complete, selection, passphrases, protectedSub));
+    }
+    await assert.rejects(exportDeviceKey(complete, [signing], {}, protectedSub));
+    await assert.rejects(exportDeviceKey(complete, [signing], { [signing]: 'wrong password' }, protectedSub));
+    await assert.rejects(exportDeviceKey(complete, [signing], passphrases, { passphrase: '', allowUnprotected: false }));
+    const device = await importKeyDocument(await exportDeviceKey(complete, [signing], passphrases, protectedSub));
+    await assert.rejects(exportDeviceKey(device, [encryption], passphrases, protectedSub));
+    assert.deepEqual(complete.bytes, before);
+    const unprotected = await importKeyDocument(await exportDeviceKey(complete, [signing], passphrases, { passphrase: '', allowUnprotected: true }));
+    assert.equal(rawPacket(unprotected.key.subkeys[0].keyPacket).isDecrypted(), true);
+    await unprotected.key.subkeys[0].keyPacket.validate();
+});
+
+test('new device exports refuse expired and revoked subkeys', async () => {
+    const { document, complete, signing } = await fixture();
+    const signer = await readPrivateKey({ binaryKey: document.bytes });
+    await signer.keyPacket.decrypt(primaryPassword);
+    const expiredCandidate = await generateCandidate('encryption', new Date(signer.getCreationTime().getTime() + 1000));
+    const binding = await signPacket(signer.keyPacket, {
+        signatureType: enums.signature.subkeyBinding,
+        keyFlags: new Uint8Array([enums.keyFlags.encryptCommunication | enums.keyFlags.encryptStorage]),
+        keyExpirationTime: 1,
+        keyNeverExpires: false,
+    }, { key: signer.keyPacket, bind: expiredCandidate.packet }, new Date());
+    await expiredCandidate.packet.encrypt(subPassword, fullConfig);
+    rawPacket(expiredCandidate.packet).clearPrivateParams();
+    const expiredBytes = applyPacketEdits(document.bytes, [{ start: document.bytes.length, end: document.bytes.length, replacement: encodePackets([expiredCandidate.packet, binding]) }]);
+    const expired = await importKeyDocument(armorKeyDocument({ ...document, bytes: expiredBytes }));
+    await assert.rejects(exportDeviceKey(expired, [expiredCandidate.fingerprint], { [expiredCandidate.fingerprint]: subPassword }, protectedSub), /expired/);
+    const revokedSubkey = complete.key.subkeys.find(key => key.getFingerprint() === signing)!;
+    const revocation = await signPacket(signer.keyPacket, { signatureType: enums.signature.subkeyRevocation }, { key: signer.keyPacket, bind: revokedSubkey.keyPacket }, new Date());
+    const nextSubkey = complete.frames.filter(f => f.tag === 7)[1];
+    const revokedBytes = applyPacketEdits(complete.bytes, [{ start: nextSubkey.start, end: nextSubkey.start, replacement: encodePackets([revocation]) }]);
+    const revoked = await importKeyDocument(armorKeyDocument({ ...complete, bytes: revokedBytes }));
+    await assert.rejects(exportDeviceKey(revoked, [signing], { [signing]: subPassword }, protectedSub), /revoked/);
+    assert.deepEqual(expired.bytes, expiredBytes);
+    assert.deepEqual(revoked.bytes, revokedBytes);
+    rawPacket(signer.keyPacket).clearPrivateParams();
 });

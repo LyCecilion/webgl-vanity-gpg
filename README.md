@@ -33,6 +33,12 @@
 
 `node --experimental-strip-types --test tests/key-lifecycle.test.ts` 使用真实 OpenPGP.js 和隔离的 GnuPG 临时 keyring 验证签名、解密、历史包保留、期限与失败原子性，不使用个人 GnuPG 配置。
 
+## 设备私钥的权限范围
+
+`src/device-export.ts` 的 `exportDeviceKey` 保留完整公开身份与签名历史，但主钥和所有未选子钥使用 GNU dummy 秘密包，仅所选子钥带有实际秘密材料。选中项按设备新口令重新保护；已撤销、已过期或没有秘密材料的子钥不能供新设备导出。操作使用独立解析副本，不改变完整备份。
+
+生命周期测试在全新的设备 GnuPG keyring 中检查实际 `private-keys-v1.d` 文件集合恰等于所选子钥的 keygrips，并验证所选 S 签名、所选 E 解密成功、错误口令和主钥/未选 S 操作失败。公开证书和设备文件都不是完整私钥备份。
+
 ## 类似工具和性能对比
 
 | Repo | 计算方式 | 速度（hash/s） | 注释 |
