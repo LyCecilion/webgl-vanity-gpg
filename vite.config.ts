@@ -10,6 +10,8 @@ import { visualizer } from 'rollup-plugin-visualizer';
 // https://vitejs.dev/config/
 export default defineConfig({
     base: '',
+    server: { host: '127.0.0.1' },
+    preview: { host: '127.0.0.1' },
     plugins: [
         (() => {
             // Download shader_minifier executable from:

@@ -45,6 +45,34 @@
                     display: unset;
                 }
             }
+            .certificate-table {
+                overflow-x: auto;
+            }
+            #certificate-rows {
+                width: 100%;
+                min-width: 900px;
+                table-layout: fixed;
+            }
+            #certificate-rows td, #certificate-rows th {
+                white-space: normal;
+                overflow-wrap: anywhere;
+                vertical-align: top;
+                padding: .5em;
+            }
+            #certificate-rows th:first-child { width: 25%; }
+            #certificate-rows th:nth-child(2) { width: 5%; }
+            #certificate-rows th:nth-child(3) { width: 16%; }
+            #certificate-rows th:nth-child(4) { width: 5%; }
+            #certificate-rows th:nth-child(5) { width: 23%; }
+            #certificate-rows th:nth-child(6) { width: 16%; }
+            #certificate-rows th:nth-child(7) { width: 10%; }
+            footer section {
+                display: inline-block;
+                margin: 0 .5em;
+            }
+            fieldset {
+                margin-bottom: var(--global-line-height);
+            }
         </style>
     </head>
     <body class="container" v-scope @vue:mounted="mounted">
@@ -53,132 +81,398 @@
                 <div class="logo terminal-prompt">webgl-vanity-gpg</div>
             </div>
             <div style="flex-grow:1"></div>
-            <a href="https://github.com/TransparentLC/webgl-vanity-gpg" style="display:flex;background:none"><img src="https://img.shields.io/github/stars/TransparentLC/webgl-vanity-gpg?style=social"></a>
+            <a href="https://github.com/TransparentLC/webgl-vanity-gpg" style="display:flex;background:none">源代码</a>
         </header>
         <main>
-            <p>使用 GPU（WebGL）快速生成带有“靓号”的 PGP 密钥！</p>
-            <p>“靓号”指的是带有连号等特定格式的密钥指纹或 ID（例如以 <code>77777777</code> 结尾），具体介绍和生成原理请参见：</p>
+            <p>本地运行的长期 GPG 密钥管理工具：在 GPU 上搜索创建时间落在指定范围、指纹以指定前缀开头的 Ed25519 主钥，之后可以继续为其追加签名／加密子钥、延长有效期，并导出只包含选定子钥秘密材料的设备私钥。</p>
             <ul>
-                <li><a href="https://www.douban.com/note/763978955/">一位 PGP 进步青年的科学算号实践</a></li>
-                <li><a href="https://blog.dejavu.moe/posts/the-scientific-vanity-pgp-counting-guide/">某科学的 PGP 算号指南</a></li>
+                <li>请只在 <code>localhost</code> 使用本页面：它不加载任何外部图片或脚本，也不发送任何网络请求。</li>
+                <li>浏览器不保存密钥、口令或设备映射；关闭页面后需要重新导入完整私钥备份才能继续管理。</li>
+                <li>搜索命中后必须同时通过 GPU 与独立 CPU 的指纹校验，校验失败时会报错，不会签发任何密钥。</li>
+                <li>“靓号”原理参见：<a href="https://www.douban.com/note/763978955/">一位 PGP 进步青年的科学算号实践</a>、<a href="https://blog.dejavu.moe/posts/the-scientific-vanity-pgp-counting-guide/">某科学的 PGP 算号指南</a>。使用 Rust 和 OpenCL 的本地算号工具见 <a href="https://github.com/TransparentLC/opencl_vanity_gpg">opencl_vanity_gpg</a>。</li>
             </ul>
-            <p>密钥使用 <a href="https://openpgpjs.org/">OpenPGP.js</a> 在浏览器中生成，不会发送到其他地方。如果仍然担心这一点，可以检查源代码、查看浏览器开发者工具的“网络”部分、或在页面加载完成后断网使用。</p>
-            <p>如果你是 Firefox 用户，请点击地址栏左侧的小盾牌图标禁用“增强型跟踪保护”，否则生成的密钥指纹会不符合你设定的格式。</p>
-            <p>使用 Rust 和 OpenCL 实现的本地运行版，同样开箱即用，算号效率更高：<a href="https://github.com/TransparentLC/opencl_vanity_gpg">opencl_vanity_gpg</a></p>
             <hr>
-            <div class="form-group">
-                <label>密钥类型</label>
-                <select v-model="keyType">
-                    <optgroup label="ECC">
-                        <option value="curve25519Legacy">Curve25519 (ed25519/cv25519)</option>
-                        <option value="nistP256">NIST P-256</option>
-                        <option value="nistP384">NIST P-384</option>
-                        <option value="nistP521">NIST P-521</option>
-                        <option value="brainpoolP256r1">Brainpool P-256</option>
-                        <option value="brainpoolP384r1">Brainpool P-384</option>
-                        <option value="brainpoolP512r1">Brainpool P-512</option>
-                    </optgroup>
-                    <optgroup label="RSA">
-                        <option value="2048">2048 bits</option>
-                        <option value="3072">3072 bits</option>
-                        <option value="4096">4096 bits</option>
-                    </optgroup>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>用户 ID</label>
-                <div class="grid">
-                    <input v-model="userIDInput.name" type="text" @keypress.enter="addUserID" placeholder="Dummy">
-                    <input v-model="userIDInput.email" type="email" @keypress.enter="addUserID" placeholder="dummy@example.com">
-                </div>
-            </div>
-            <p>可以按 <kbd>Enter</kbd> 添加更多的用户 ID。</p>
-            <ul>
-                <li v-for="e, i in userID">{{ e.name }} &lt;{{ e.email }}&gt; <span @click="userID.splice(i, 1)" style="color:var(--error-color);cursor:pointer">[x]</span></li>
-            </ul>
-            <div class="form-group">
-                <label>并行设定（线程数/迭代数）</label>
-                <div class="grid">
-                    <input v-model="thread" type="number" min="1">
-                    <input v-model="iteration" type="number" min="1">
-                </div>
-            </div>
-            <p>根据 GPU 性能和占用率调节这两个值。</p>
-            <p>你会得到一个生效时间距离现在 {{ (backTime > 2592000) ? `${Math.ceil(backTime / 2592000)} 个月` : `${Math.ceil(backTime / 86400)} 天` }}之内（最早为 <code>{{ (new Date(Date.now() - backTime * 1000)).toISOString() }}</code>）的密钥。</p>
-            <div class="form-group">
-                <label>密钥指纹格式 <a @click="showAutoFilter">查看 GLSL 代码</a></label>
-                <input v-model="pattern" type="text" required style="font-variant-ligatures:none">
-                <input v-model="vanitySubkey" type="checkbox">将格式应用到子密钥而不是主密钥上
-            </div>
-            <p>40 个十六进制数字，不区分大小写。空格会被忽略，<code>X</code> 表示只要这些位相同即可，其他 <code>[\dA-FX]</code> 以外的字符表示对该位数字没有要求。</p>
-            <p>最后 <input v-model="patternLength" style="width:3em;padding:unset;text-align:center" type="number" min="1" max="40"> 个数字为 <input v-model="patternNumber" style="width:1em;padding:unset;text-align:center" type="text" pattern="[\dA-Fa-fXx]"> <a @click="patternHelper">快速设置</a></p>
-            <p>预计需要计算 {{ estimatedHashCount }} 次 hash，实际的计算次数可能是这个值的几分之一或几倍，也许需要一点运气……</p>
-            <details style="margin-bottom:var(--global-line-height)">
-                <summary>直接使用 GLSL 代码！</summary>
-                <div class="terminal-card" style="margin-bottom:var(--global-line-height)">
-                    <textarea v-model="filter" style="border:none" rows="5"></textarea>
-                </div>
-                <p>你可以自行编写更复杂的判断密钥指纹是否符合格式的 GLSL 代码，这些代码将以 `#define FILTER(h) (code)` 的形式出现在算号使用的着色器中。</p>
-                <p>换行会被替换成空格，留空则会使用“密钥指纹格式”的设定，输入错误的代码将无法得到任何密钥。</p>
-                <p>在着色器中，计算的密钥指纹（实际上是 80 bytes 的 SHA-1 hash）以大端序保存为 `uint[5]`，并使用上面的 `FILTER` 来检查是否符合格式。</p>
-            </details>
-            <details style="margin-bottom:var(--global-line-height)">
-                <summary>把不同密钥的“靓号”合并到一起！</summary>
-                <div class="grid desktop-only">
-                    <div class="terminal-card" style="margin-bottom:var(--global-line-height)">
-                        <header>私钥 A</header>
-                        <textarea v-model="subkeyCombinerArmoredA" style="border:none" rows="10"></textarea>
+
+            <section aria-labelledby="current-heading">
+                <h2 id="current-heading">当前证书</h2>
+                <p id="current-empty" v-if="!hasDocument">尚未创建或导入证书。可以从「创建主钥」开始，或导入现有的私钥备份。</p>
+                <div v-else>
+                    <p>主钥指纹：<code id="current-fingerprint">{{ formatFingerprint(documentFingerprint) }}</code></p>
+                    <p>用户 ID：<span v-if="documentUserIDs.length === 0">（无）</span></p>
+                    <ul id="current-user-ids">
+                        <li v-for="(userID, index) in documentUserIDs" :key="index">{{ userID }}</li>
+                    </ul>
+                    <div class="form-group">
+                        <label for="view-zone">创建时间显示时区</label>
+                        <select id="view-zone" v-model="viewZone">
+                            <option value="local">本机时区（{{ localTimeZoneName }}）</option>
+                            <option value="utc">UTC</option>
+                        </select>
                     </div>
-                    <div class="terminal-card" style="margin-bottom:var(--global-line-height)">
-                        <header>私钥 B</header>
-                        <textarea v-model="subkeyCombinerArmoredB" style="border:none" rows="10"></textarea>
+                    <div class="certificate-table" role="region" aria-label="当前证书密钥列表" tabindex="0">
+                    <table id="certificate-rows">
+                        <thead>
+                            <tr>
+                                <th>密钥指纹</th>
+                                <th>类型</th>
+                                <th>算法</th>
+                                <th>用途</th>
+                                <th>创建时间</th>
+                                <th>到期状态</th>
+                                <th>秘密材料</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="row in certificateRows" :key="row.fingerprint">
+                                <td><code>{{ formatFingerprint(row.fingerprint) }}</code></td>
+                                <td>{{ row.primary ? '主钥' : '子钥' }}</td>
+                                <td>{{ row.algorithm }}</td>
+                                <td>{{ row.usage }}</td>
+                                <td>{{ rowCreated(row) }}</td>
+                                <td>{{ rowExpiry(row) }}</td>
+                                <td>{{ row.hasSecret ? '有' : '无（dummy）' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
                     </div>
+                    <p id="dirty-notice" v-if="dirtyBackup">当前证书有尚未确认保存的完整私钥备份：在「导出」中下载「完整私钥备份」并在文件保存后点击「确认备份已保存」。只导出公钥或设备私钥不会解除这个提醒。</p>
+                    <p id="clean-notice" v-else>当前证书没有待确认的完整私钥备份变更。</p>
                 </div>
-                <p>如果你希望生成主密钥和子密钥都是“靓号”的密钥，可以先分别生成两个不同的密钥，然后在这里合并。</p>
-                <p>私钥 B 的主密钥和子密钥将作为子密钥被附加到私钥 A 上。</p>
-                <p>然后，请自行使用 <code>gpg --edit-key</code> 编辑私钥，例如删除不需要的子密钥 <code>delkey</code>、修改密钥用途  <code>change-usage</code> 和有效期 <code>expire</code> 等，再输入 <code>save</code> 保存更改。</p>
-                <button @click="subkeyCombine" class="btn btn-block btn-ghost btn-primary">保存合并后的私钥</button>
-            </details>
-            <div class="form-group">
-                <input v-model="notification.sfx" type="checkbox">算号成功后播放提示音
-                <br>
-                <input v-model="notification.ntfy" type="checkbox">算号成功后使用 <a href="https://ntfy.sh/app">ntfy</a> 发送通知 <input v-model="notification.ntfyTopic" type="text" style="width:unset;padding:unset" placeholder="主题名称" pattern="[\-_A-Za-z\d]{1,64}">
-                <br>
-                <input v-model="nonstopMode" type="checkbox">不间断算号
-                <br>
-                <input v-model="saveToDirectory" type="checkbox">将生成的私钥自动保存到本地 <a @click="setSaveDirectory">选择目录</a> {{ saveToDirectoryHandle ? saveToDirectoryHandle.name : '未设定' }}
-            </div>
-            <button @click="toggleKeygen" :class="['btn', 'btn-block', running ? 'btn-error' : 'btn-primary']">{{ running ? '停止算号' : '开始算号' }}</button>
+            </section>
             <hr>
-            <blockquote>
-                <p>已计算 hash：{{ hashCount }} <span v-if="!filter">{{ `(${Number(BigInt(hashCount) * 100n / estimatedHashCount) / 100}x estimated)` }}</span><br>耗时：{{ Math.round(runningTime / 1000 * 100) / 100 }}s<br>速度：{{ Math.round(hashCount / runningTime * 1000 * 100) / 100 || 0 }} hash/s</p>
-            </blockquote>
-            <details style="margin-bottom:var(--global-line-height)">
-                <summary>生成的密钥（已生成 {{ generatedKeyHistory.length }} 个）</summary>
-                <ul>
-                    <li v-for="e, i in generatedKeyHistory" style="cursor:pointer"><a @click="generatedKey = e"><code>{{ formatFingerprint(e.publicKey.getFingerprint().substring(24, 40)) }}</code> {{ `(${[e.publicKey, ...e.publicKey.subkeys].map(t => {const a = t.getAlgorithmInfo(); return a.bits ? `rsa${a.bits}` : a.curve}).join(', ')})` }} {{ e.publicKey.getCreationTime().toISOString() }}</a> <span @click="generatedKeyHistory.splice(i, 1)" style="color:var(--error-color);cursor:pointer">[x]</span></li>
+
+            <section aria-labelledby="status-heading">
+                <h2 id="status-heading">状态</h2>
+                <div id="operation-status" aria-live="polite">
+                    <p v-if="statusMessage">{{ statusMessage }}</p>
+                    <p id="search-window" v-if="searchWindowText">{{ searchWindowText }}</p>
+                    <p id="search-progress" v-if="progressTotal > 0">{{ running ? '正在搜索' : '搜索结束' }}{{ roleText(progressRole) }}：已完成 {{ progressCompleted }} / {{ progressTotal }} 把，材料数 {{ progressMaterials }}，实际 hash 次数 {{ progressHashes }}，耗时 {{ formatDuration(progressElapsedMs) }}</p>
+                </div>
+                <p id="operation-error" role="alert" aria-live="assertive" v-if="errorMessage">{{ errorMessage }}</p>
+                <button type="button" id="operation-stop" class="btn btn-block btn-error" v-if="running" :disabled="!stoppable" @click="stopSearch">停止当前搜索</button>
+                <div class="form-group">
+                    <label for="sound-enabled">操作成功时播放提示音（默认关闭）</label>
+                    <input id="sound-enabled" type="checkbox" v-model="soundEnabled">
+                </div>
+            </section>
+            <hr>
+
+            <section aria-labelledby="create-heading">
+                <h2 id="create-heading">创建主钥</h2>
+                <p>只生成一把仅用于认证（[C]）的 Ed25519 v4 主钥，不附带任何子钥；是否添加子钥由「添加子钥」单独决定。</p>
+                <fieldset>
+                    <legend>用户 ID（至少一个）</legend>
+                    <div class="grid">
+                        <div class="form-group">
+                            <label for="create-uid-name">姓名</label>
+                            <input id="create-uid-name" type="text" autocomplete="off" v-model="createUIDInput.name" @keydown.enter="addCreateUID">
+                        </div>
+                        <div class="form-group">
+                            <label for="create-uid-comment">注释（可选）</label>
+                            <input id="create-uid-comment" type="text" autocomplete="off" v-model="createUIDInput.comment" @keydown.enter="addCreateUID">
+                        </div>
+                        <div class="form-group">
+                            <label for="create-uid-email">邮箱</label>
+                            <input id="create-uid-email" type="email" autocomplete="off" v-model="createUIDInput.email" @keydown.enter="addCreateUID">
+                        </div>
+                    </div>
+                    <button type="button" id="create-uid-add" class="btn btn-ghost btn-primary" @click="addCreateUID">添加用户 ID</button>
+                    <ul id="create-uid-list">
+                        <li v-for="(userID, index) in createUIDs" :key="index">
+                            {{ formatUserID(userID) }}
+                            <button type="button" class="btn btn-ghost btn-error" @click="removeCreateUID(index)">移除</button>
+                        </li>
+                    </ul>
+                </fieldset>
+                <div class="form-group">
+                    <label for="create-prefix">主钥指纹前缀</label>
+                    <input id="create-prefix" type="text" autocomplete="off" v-model="createPrefix">
+                    <p>1 到 40 个十六进制字符（0-9、A-F），空格会被忽略，不区分大小写。默认 <code>4A2E117A</code>。</p>
+                </div>
+                <div class="form-group">
+                    <label for="create-date-mode">创建时间范围</label>
+                    <select id="create-date-mode" v-model="createDateMode">
+                        <option value="today">任务启动当天</option>
+                        <option value="day">指定自然日</option>
+                        <option value="range">自定义区间</option>
+                    </select>
+                </div>
+                <div class="form-group" v-if="createDateMode === 'day'">
+                    <label for="create-date">自然日</label>
+                    <input id="create-date" type="date" v-model="createDate">
+                </div>
+                <div class="grid" v-if="createDateMode === 'range'">
+                    <div class="form-group">
+                        <label for="create-range-start">区间起点（含）</label>
+                        <input id="create-range-start" type="datetime-local" step="1" v-model="createRangeStart">
+                    </div>
+                    <div class="form-group">
+                        <label for="create-range-end">区间终点（含）</label>
+                        <input id="create-range-end" type="datetime-local" step="1" v-model="createRangeEnd">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="create-zone">时区</label>
+                    <select id="create-zone" v-model="createZone">
+                        <option value="local">本机时区（{{ localTimeZoneName }}）</option>
+                        <option value="utc">UTC</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="create-expiry-mode">到期时间</label>
+                    <select id="create-expiry-mode" v-model="createExpiryMode">
+                        <option value="never">永不过期</option>
+                        <option value="date">指定到期日期</option>
+                    </select>
+                </div>
+                <div class="form-group" v-if="createExpiryMode === 'date'">
+                    <label for="create-expiry-date">到期日期（到该日次日零点失效）</label>
+                    <input id="create-expiry-date" type="date" v-model="createExpiryDate">
+                </div>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="create-passphrase">保护口令</label>
+                        <input id="create-passphrase" type="password" autocomplete="new-password" v-model="createPassphrase">
+                    </div>
+                    <div class="form-group">
+                        <label for="create-passphrase-confirm">确认保护口令</label>
+                        <input id="create-passphrase-confirm" type="password" autocomplete="new-password" v-model="createPassphraseConfirm">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="create-allow-unprotected">允许未加密私钥（仅在明确需要时勾选）</label>
+                    <input id="create-allow-unprotected" type="checkbox" v-model="createAllowUnprotected">
+                </div>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="create-threads">线程数</label>
+                        <input id="create-threads" type="number" min="1" v-model="createThreads">
+                    </div>
+                    <div class="form-group">
+                        <label for="create-iterations">迭代数</label>
+                        <input id="create-iterations" type="number" min="1" v-model="createIterations">
+                    </div>
+                </div>
+                <p>线程数与迭代数只决定 GPU 批次大小，不影响密钥的创建时间范围；搜索开始前会显示冻结后的实际区间与候选秒数。</p>
+                <button type="button" id="create-start" class="btn btn-block btn-primary" :disabled="running" @click="createPrimary">开始搜索主钥</button>
+                <button type="button" id="create-stop" class="btn btn-block btn-error" :disabled="!running || !stoppable" @click="stopSearch">停止搜索</button>
+            </section>
+            <hr>
+
+            <section aria-labelledby="import-heading">
+                <h2 id="import-heading">导入私钥</h2>
+                <p>导入一把 ASCII armor 私钥（完整备份或设备文件）。导入会替换当前证书，导入的证书视为已备份状态。</p>
+                <div class="form-group">
+                    <label for="import-file">选择 <code>.asc</code> 文件</label>
+                    <input id="import-file" type="file" accept=".asc,.gpg,.txt,application/pgp-keys" :disabled="running" @change="importFile">
+                </div>
+                <div class="form-group">
+                    <label for="import-text">或粘贴私钥文本</label>
+                    <textarea id="import-text" rows="6" v-model="importText" :disabled="running"></textarea>
+                </div>
+                <button type="button" id="import-start" class="btn btn-block btn-primary" :disabled="running" @click="importKey">导入</button>
+            </section>
+            <hr>
+
+            <section aria-labelledby="add-heading">
+                <h2 id="add-heading">添加子钥</h2>
+                <p id="add-blocked" v-if="addBlockedReason">{{ addBlockedReason }}</p>
+                <p>先按「签名子钥」再按「加密子钥」的顺序搜索，全部命中并完成绑定签名后才会一次性发布新的证书；取消或任一步失败都不会改变当前证书。</p>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="add-count">签名子钥数量（可以为 0）</label>
+                        <input id="add-count" type="number" min="0" v-model="addCount">
+                    </div>
+                    <div class="form-group">
+                        <label for="add-encryption">同时添加一把加密子钥（默认不选，一次最多一把）</label>
+                        <input id="add-encryption" type="checkbox" v-model="addEncryption">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="add-prefix">子钥指纹前缀</label>
+                    <input id="add-prefix" type="text" autocomplete="off" v-model="addPrefix">
+                    <p>签名子钥和加密子钥共用这个前缀。默认 <code>4217</code>。</p>
+                </div>
+                <div class="form-group">
+                    <label for="add-date-mode">创建时间范围</label>
+                    <select id="add-date-mode" v-model="addDateMode">
+                        <option value="today">任务启动当天</option>
+                        <option value="day">指定自然日</option>
+                        <option value="range">自定义区间</option>
+                    </select>
+                </div>
+                <div class="form-group" v-if="addDateMode === 'day'">
+                    <label for="add-date">自然日</label>
+                    <input id="add-date" type="date" v-model="addDate">
+                </div>
+                <div class="grid" v-if="addDateMode === 'range'">
+                    <div class="form-group">
+                        <label for="add-range-start">区间起点（含）</label>
+                        <input id="add-range-start" type="datetime-local" step="1" v-model="addRangeStart">
+                    </div>
+                    <div class="form-group">
+                        <label for="add-range-end">区间终点（含）</label>
+                        <input id="add-range-end" type="datetime-local" step="1" v-model="addRangeEnd">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="add-zone">时区</label>
+                    <select id="add-zone" v-model="addZone" @change="refreshAddExpiry">
+                        <option value="local">本机时区（{{ localTimeZoneName }}）</option>
+                        <option value="utc">UTC</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="add-expiry-mode">子钥到期时间</label>
+                    <select id="add-expiry-mode" v-model="addExpiryMode">
+                        <option value="date">指定到期日期</option>
+                        <option value="never">永不过期</option>
+                    </select>
+                </div>
+                <div class="form-group" v-if="addExpiryMode === 'date'">
+                    <label for="add-expiry-date">到期日期（默认为操作时刻后 365 天，到该日次日零点失效）</label>
+                    <input id="add-expiry-date" type="date" v-model="addExpiryDate">
+                </div>
+                <div class="form-group">
+                    <label for="add-primary-passphrase">原主钥口令（主钥未加密时留空）</label>
+                    <input id="add-primary-passphrase" type="password" autocomplete="off" v-model="addPrimaryPassphrase">
+                </div>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="add-passphrase">新子钥保护口令</label>
+                        <input id="add-passphrase" type="password" autocomplete="new-password" v-model="addPassphrase">
+                    </div>
+                    <div class="form-group">
+                        <label for="add-passphrase-confirm">确认新子钥保护口令</label>
+                        <input id="add-passphrase-confirm" type="password" autocomplete="new-password" v-model="addPassphraseConfirm">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="add-allow-unprotected">允许新子钥为未加密私钥</label>
+                    <input id="add-allow-unprotected" type="checkbox" v-model="addAllowUnprotected">
+                </div>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="add-threads">线程数</label>
+                        <input id="add-threads" type="number" min="1" v-model="addThreads">
+                    </div>
+                    <div class="form-group">
+                        <label for="add-iterations">迭代数</label>
+                        <input id="add-iterations" type="number" min="1" v-model="addIterations">
+                    </div>
+                </div>
+                <button type="button" id="add-start" class="btn btn-block btn-primary" :disabled="running || !hasDocument || addBlockedReason !== ''" @click="addSubkeys">开始搜索并添加子钥</button>
+                <button type="button" id="add-stop" class="btn btn-block btn-error" :disabled="!running || !stoppable" @click="stopSearch">停止搜索</button>
+            </section>
+            <hr>
+
+            <section aria-labelledby="renew-heading">
+                <h2 id="renew-heading">延长有效期</h2>
+                <p id="renew-blocked" v-if="renewBlockedReason">{{ renewBlockedReason }}</p>
+                <p>续期只新增签名，不改变任何既有 packet、指纹或创建时间，也不能缩短有效期或复活已撤销的密钥。永不过期的密钥不能续期，但可以在这里为有限期的密钥选择「永不过期」。</p>
+                <ul id="renew-list">
+                    <li v-for="row in certificateRows" :key="row.fingerprint">
+                        <label :for="'renew-select-' + row.fingerprint">
+                            <input :id="'renew-select-' + row.fingerprint" type="checkbox" v-model="renewSelection[row.fingerprint]" :disabled="running || renewReason(row) !== ''">
+                            <code>{{ formatFingerprint(row.fingerprint) }}</code>
+                            {{ row.primary ? '主钥' : row.role === 'signing' ? '签名子钥' : row.role === 'encryption' ? '加密子钥' : '子钥' }}
+                            — 当前到期：{{ rowExpiry(row) }}
+                        </label>
+                        <span v-if="renewReason(row)">（{{ renewReason(row) }}）</span>
+                        <div v-if="renewSelection[row.fingerprint] === true && row.role === 'signing'">
+                            <label :for="'renew-passphrase-' + row.fingerprint">该签名子钥的口令（仅当它的 backsig 需要重新签名时才会使用）</label>
+                            <input :id="'renew-passphrase-' + row.fingerprint" type="password" autocomplete="off" v-model="renewSubkeyPassphrases[row.fingerprint]">
+                        </div>
+                    </li>
                 </ul>
-                <p><span @click="bulkDownload" style="color:var(--primary-color);cursor:pointer">[批量保存私钥]</span> <span @click="generatedKeyHistory.length = 0" style="color:var(--error-color);cursor:pointer">[清除生成记录]</span></p>
-            </details>
-            <div class="grid desktop-only">
-                <div class="terminal-card" style="margin-bottom:var(--global-line-height)">
-                    <header>私钥</header>
-                    <textarea :value="generatedKey?.privateKey.armor() || ''" style="border:none" rows="10" readonly></textarea>
+                <div class="form-group">
+                    <label for="renew-zone">到期日期时区</label>
+                    <select id="renew-zone" v-model="renewZone">
+                        <option value="local">本机时区（{{ localTimeZoneName }}）</option>
+                        <option value="utc">UTC</option>
+                    </select>
                 </div>
-                <div class="terminal-card" style="margin-bottom:var(--global-line-height)">
-                    <header>公钥</header>
-                    <textarea :value="generatedKey?.publicKey.armor() || ''" style="border:none" rows="10" readonly></textarea>
+                <div class="form-group">
+                    <label for="renew-expiry-mode">新的到期时间</label>
+                    <select id="renew-expiry-mode" v-model="renewExpiryMode">
+                        <option value="date">指定到期日期</option>
+                        <option value="never">改为永不过期</option>
+                    </select>
                 </div>
-            </div>
-            <p>生效时间：<code>{{ generatedKey?.publicKey.getCreationTime().toISOString() || '****-**-**T**:**:**.***Z' }}</code></p>
-            <p>指纹（主密钥和子密钥）：</p>
-            <ul>
-                <li v-for="e in (generatedKey ? [generatedKey.publicKey, ...generatedKey.publicKey.subkeys].map(e => e.getFingerprint()) : ['*'.repeat(40), '*'.repeat(40)])"><code>{{ formatFingerprint(e) }}</code></li>
-            </ul>
-            <div class="grid">
-                <a class="btn btn-ghost btn-primary" :href="`data:text/plain;charset=utf-8,${encodeURIComponent(generatedKey?.privateKey.armor() || '')}`" :download="generatedKey ? `${generatedKey.privateKey.getFingerprint().toUpperCase()}-sec.asc` : 'nothing'">保存私钥</a>
-                <a class="btn btn-ghost btn-primary" :href="`data:text/plain;charset=utf-8,${encodeURIComponent(generatedKey?.publicKey.armor() || '')}`" :download="generatedKey ? `${generatedKey.publicKey.getFingerprint().toUpperCase()}-pub.asc` : 'nothing'">保存公钥</a>
-            </div>
+                <div class="form-group" v-if="renewExpiryMode === 'date'">
+                    <label for="renew-expiry-date">新的到期日期（到该日次日零点失效，必须晚于当前到期时刻）</label>
+                    <input id="renew-expiry-date" type="date" v-model="renewExpiryDate">
+                </div>
+                <div class="form-group">
+                    <label for="renew-passphrase">主钥口令（主钥未加密时留空）</label>
+                    <input id="renew-passphrase" type="password" autocomplete="off" v-model="renewPassphrase">
+                </div>
+                <button type="button" id="renew-start" class="btn btn-block btn-primary" :disabled="renewDisabled()" @click="renewSelected">延长所选密钥的有效期</button>
+            </section>
+            <hr>
+
+            <section aria-labelledby="export-heading">
+                <h2 id="export-heading">导出</h2>
+                <p>三种导出的权限范围完全不同：公钥可以公开分发；完整私钥备份包含当前证书的全部秘密材料（主钥和所有子钥）；设备私钥只包含你选中的子钥的秘密材料，主钥和其他子钥在文件里是 GNU dummy。设备文件不能代替完整私钥备份。</p>
+                <p id="export-empty" v-if="!hasDocument">请先创建或导入证书，再进行导出。</p>
+                <div v-else>
+
+                    <h3>公钥</h3>
+                    <p>下载 <code>{{ publicFileName() }}</code>：只包含公开证书，不含任何秘密材料。</p>
+                    <button type="button" id="export-public" class="btn btn-block btn-primary" :disabled="running || !hasDocument" @click="exportPublic">下载公钥</button>
+
+                    <h3>完整私钥备份</h3>
+                    <p>下载 <code>{{ backupFileName() }}</code>：包含当前证书的全部现有秘密材料。请离线保存，并且不要把它当作设备私钥使用。</p>
+                    <div class="form-group">
+                        <label for="export-backup-ack">我了解完整私钥备份包含全部秘密材料</label>
+                        <input id="export-backup-ack" type="checkbox" v-model="backupAcknowledged" :disabled="running || !hasDocument">
+                </div>
+                    <button type="button" id="export-backup" class="btn btn-block btn-primary" :disabled="running || !hasDocument || !backupAcknowledged" @click="exportBackup">下载完整私钥备份</button>
+                    <div id="export-backup-confirm-box" v-if="backupStarted">
+                        <p>已发起完整私钥备份下载，请确认文件已保存到安全位置。</p>
+                        <button type="button" id="export-backup-confirm" class="btn btn-block btn-ghost btn-primary" @click="confirmBackupSaved">确认备份已保存</button>
+                    </div>
+
+                    <h3>设备私钥</h3>
+                    <p>下载 <code>{{ deviceFileName() }}</code>：只包含所选子钥的秘密材料。已选子钥需要其当前口令解锁后才会按新的设备口令重新加密；未选子钥和主钥在文件里都是 GNU dummy，不含任何秘密材料。</p>
+                    <div class="form-group">
+                        <label for="export-device-name">设备名称（只用于文件名，可以为空）</label>
+                        <input id="export-device-name" type="text" autocomplete="off" v-model="deviceName">
+                    </div>
+                    <ul id="device-list">
+                        <li v-for="row in certificateRows" :key="row.fingerprint">
+                            <label :for="'device-select-' + row.fingerprint" v-if="!row.primary">
+                                <input :id="'device-select-' + row.fingerprint" type="checkbox" v-model="deviceSelection[row.fingerprint]" :disabled="running || deviceReason(row) !== ''">
+                                <code>{{ formatFingerprint(row.fingerprint) }}</code>
+                                {{ row.role === 'signing' ? '签名子钥' : row.role === 'encryption' ? '加密子钥' : '子钥' }}
+                                — 用途 {{ row.usage }}，到期：{{ rowExpiry(row) }}
+                            </label>
+                            <span v-if="deviceReason(row)">（{{ deviceReason(row) }}）</span>
+                            <div v-if="deviceSelection[row.fingerprint] === true">
+                                <label :for="'device-passphrase-' + row.fingerprint">该子钥的当前口令（未加密时留空）</label>
+                                <input :id="'device-passphrase-' + row.fingerprint" type="password" autocomplete="off" v-model="deviceSubkeyPassphrases[row.fingerprint]">
+                            </div>
+                        </li>
+                    </ul>
+                    <p id="device-selection-summary" v-if="selectedDeviceFingerprints().length > 0">已选择的子钥完整指纹：<code v-for="fingerprint in selectedDeviceFingerprints()" :key="fingerprint">{{ formatFingerprint(fingerprint) }}</code></p>
+                    <p id="device-selection-empty" v-else>尚未选择任何子钥，未选择时无法导出设备私钥。</p>
+                    <div class="grid">
+                        <div class="form-group">
+                            <label for="export-device-passphrase">新设备保护口令</label>
+                            <input id="export-device-passphrase" type="password" autocomplete="new-password" v-model="devicePassphrase">
+                        </div>
+                        <div class="form-group">
+                            <label for="export-device-passphrase-confirm">确认新设备保护口令</label>
+                            <input id="export-device-passphrase-confirm" type="password" autocomplete="new-password" v-model="devicePassphraseConfirm">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="export-device-allow-unprotected">允许设备私钥中的所选子钥不加密</label>
+                        <input id="export-device-allow-unprotected" type="checkbox" v-model="deviceAllowUnprotected">
+                    </div>
+                    <button type="button" id="export-device" class="btn btn-block btn-primary" :disabled="deviceDisabled()" @click="exportDevice">导出设备私钥</button>
+                </div>
+            </section>
             <hr>
             <footer style="text-align:center">
                 <p><small>© 2024 ✨小透明・宸✨ <a href="https://github.com/TransparentLC/webgl-vanity-gpg">源代码</a></small></p>

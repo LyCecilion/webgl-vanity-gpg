@@ -1,39 +1,39 @@
-import {
-    generateKey,
-    readPrivateKey,
-    reformatKey,
-} from 'openpgp';
-import type {
-    KeyOptions,
-    KeyPair,
-    PrivateKey,
-} from 'openpgp';
+import { generateCandidate, rawPacket } from './openpgp-packets.ts';
+import type { KeyRole, SecretPacket, VanityCandidate } from './openpgp-packets.ts';
+import type { SearchWindow } from './time-window.ts';
 
 import vshaderString from './vshader.glsl?raw';
 import fshaderString from './fshader.glsl?raw';
 
-// SHA-1测试向量及中间值：
+// SHA-1 test vectors and intermediate values:
 // https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-and-Guidelines/documents/examples/SHA1.pdf
+// The GPU hashes the v4 key packet exactly like the OpenPGP.js fingerprint code:
+// 0x99, the two byte public packet length, then the public packet body. The
+// creation time is the second uint32 word of that input, so one material covers
+// every timestamp in the window and the secret material never leaves JS memory.
 
-const editPrivateKeyCreationTime = async (privateKey: PrivateKey, created: Date): Promise<KeyPair> => {
-    privateKey = await readPrivateKey({armoredKey: privateKey.armor()});
-    await Promise.all(
-        [privateKey.keyPacket, ...privateKey.subkeys.map(e => e.keyPacket)]
-            .map(e => {
-                e.created = created;
-                // @ts-ignore
-                // computeFingerprintAndKeyID not in d.ts
-                // https://github.com/openpgpjs/openpgpjs/blob/a0337780b77093716ba92acb4a70b3bb5ceec87d/src/packet/public_key.js#L200
-                return e.computeFingerprintAndKeyID();
-            })
-    );
-    return await reformatKey({
-        privateKey,
-        userIDs: privateKey.users.map(e => e.userID!),
-        date: created,
-        format: 'object',
-    });
+export type SearchProgress = {
+    hashes: number;
+    materials: number;
+    elapsedMs: number;
 };
+
+export type VanitySearchOptions = {
+    role: KeyRole;
+    prefix: string;
+    window: SearchWindow;
+    threads: number;
+    iterations: number;
+    signal: AbortSignal;
+    onProgress?: (progress: SearchProgress) => void;
+};
+
+// A v4 key packet hash input is padded to 64 byte SHA-1 chunks; 128 bytes cover
+// both ed25519 (64) and curve25519 (128) candidates of the supported roles.
+const MAX_PADDED_HASH_BYTES = 128;
+// 40 hex characters = 20 fingerprint bytes = five uint32 words.
+const PREFIX_WORDS = 5;
+const YIELD_INTERVAL_MS = 16;
 
 const swap32 = (x: number) => (
     ((x &   0xFF) << 24) |
@@ -42,208 +42,325 @@ const swap32 = (x: number) => (
     ((x >> 24) &   0xFF)
 ) >>> 0;
 
-export const patternToFilter = (pattern: string) => {
-    pattern = pattern.replaceAll(' ', '');
-    if (pattern.length != 40) throw new Error('Invalid pattern');
-    return [
-        ...[0, 8, 16, 24, 32].map((e, i) => {
-            const s = pattern.substring(e, e + 8);
-            let mask = '';
-            let value = '';
-            let activated = false;
-            for (let i = 0; i < 8; i++) {
-                if (s[i].match(/[\da-f]/gi)) {
-                    mask += 'F';
-                    value += s[i].toUpperCase();
-                    activated = true;
-                } else {
-                    mask += '0';
-                    value += '0';
-                }
-            }
-            return activated ? `(h[${i}] & 0x${mask}u) == 0x${value}u` : '';
-        }),
-        ...pattern.split('')
-            .map((e, i) => e.toUpperCase() === 'X' ? i : null)
-            .filter(Boolean)
-            .reduce((acc, cur, idx, arr) => {
-                const leftIndex = Math.floor(arr[idx - 1]! / 8);
-                const rightIndex = Math.floor(cur! / 8);
-                const leftDigit = 7 - arr[idx - 1]! % 8;
-                const rightDigit = 7 - cur! % 8;
-                if (idx) {
-                    acc.push(`((h[${leftIndex}] ${rightDigit > leftDigit ? '<<' : '>>'} ${Math.abs(rightDigit - leftDigit) * 4}) & 0xF${'0'.repeat(rightDigit)}u) == (h[${rightIndex}] & 0xF${'0'.repeat(rightDigit)}u)`);
-                    // console.log(arr[idx - 1], cur, acc[acc.length - 1]);
-                }
-                return acc;
-            }, [] as string[]),
-    ].filter(Boolean).join(' && ') || 'true';
+type PrefixMask = {
+    wordCount: number;
+    words: Uint32Array;
+    masks: Uint32Array;
+};
+
+type GpuState = {
+    program: WebGLProgram;
+    vertexShader: WebGLShader;
+    fragmentShader: WebGLShader;
+    positionBuffer: WebGLBuffer;
+    texture: WebGLTexture;
+    framebuffer: WebGLFramebuffer;
+    iteration: WebGLUniformLocation;
+    batchEnd: WebGLUniformLocation;
+    batchCount: WebGLUniformLocation;
+    hashData: WebGLUniformLocation;
+    prefixWordCount: WebGLUniformLocation;
+    prefixWords: WebGLUniformLocation;
+    prefixMasks: WebGLUniformLocation;
+    readback: Uint32Array;
+};
+
+
+// Turns a fingerprint prefix into word values and bit masks. A trailing odd
+// nibble only sets the high half of its word mask.
+function prefixMask(prefix: string): PrefixMask {
+    const words = new Uint32Array(PREFIX_WORDS);
+    const masks = new Uint32Array(PREFIX_WORDS);
+    for (let index = 0; index < prefix.length; index++) {
+        const word = index >> 3;
+        const shift = 28 - (index % 8) * 4;
+        words[word] = (words[word] | (parseInt(prefix[index], 16) << shift)) >>> 0;
+        masks[word] = (masks[word] | (0xf << shift)) >>> 0;
+    }
+    return { wordCount: Math.ceil(prefix.length / 8), words, masks };
 }
 
-export const createVanityKey = async (
-    config: KeyOptions,
-    filter: string,
-    thread: number,
-    iteration: number,
-    progressCallback: (hash: number, time: DOMHighResTimeStamp) => void = () => {},
-    checkAbort: (hash: number, time: DOMHighResTimeStamp) => boolean = () => false,
-    vanitySubkey: boolean = false,
-): Promise<KeyPair | undefined> => {
-    const size = Math.round(Math.sqrt(thread));
-    const canvas = new OffscreenCanvas(size, size);
-    const gl = canvas.getContext('webgl2')!;
-    let initialized = false;
-    let program: WebGLProgram | undefined;
-    let hashDataLocation: WebGLUniformLocation | undefined;
-    let fingerprintDataWithoutHeader = new Uint8Array;
-    let fingerprintData = new Uint8Array;
-    let hashData = new ArrayBuffer(0);
-    let hashDataU8 = new Uint8Array;
-    let hashDataU32 = new Uint32Array;
-    const resultData = new ArrayBuffer(canvas.width * canvas.height * 4);
-    const resultDataU8 = new Uint8Array(resultData);
-    const resultDataU32 = new Uint32Array(resultData);
-    let hashCount = 0;
-    const startTime = performance.now();
 
-    return await new Promise<KeyPair | undefined>((resolve, reject) => {
-        const run = async () => {
-            try {
-                if (gl.isContextLost()) throw new Error('WebGL context lost');
+// Pads the public key packet hash input for SHA-1 and stores it as big endian
+// uint32 words, which is the order the shader consumes. The final word holds the
+// input length in bits.
+function hashWords(packet: SecretPacket): Uint32Array {
+    const fingerprintData = rawPacket(packet).writeForHash(4);
+    const paddedBytes = Math.ceil((fingerprintData.length + 9) / 64) * 64;
+    if (paddedBytes > MAX_PADDED_HASH_BYTES) throw new Error(`A ${fingerprintData.length} byte key packet exceeds the supported SHA-1 buffer.`);
+    const bytes = new Uint8Array(paddedBytes);
+    bytes.set(fingerprintData);
+    bytes[fingerprintData.length] = 0x80;
+    const words = new Uint32Array(bytes.buffer);
+    for (let index = 0; index < words.length; index++) words[index] = swap32(words[index]);
+    words[words.length - 1] = fingerprintData.length * 8;
+    return words;
+}
 
-                const keypair: KeyPair = await generateKey({
-                    ...config,
-                    format: 'object',
-                });
+// A GPU hit is only accepted after the library and an independent SHA-1 digest
+// agree on the fingerprint and the creation time is inside the frozen window.
+async function verifyCandidate(role: KeyRole, packet: SecretPacket, timestamp: number, prefix: string, window: SearchWindow): Promise<VanityCandidate> {
+    if (!Number.isInteger(timestamp) || timestamp < window.start || timestamp > window.end) throw new Error('The GPU returned a creation time outside the frozen search window.');
+    packet.created = new Date(timestamp * 1000);
+    await rawPacket(packet).computeFingerprintAndKeyID();
+    const fingerprint = packet.getFingerprint();
+    if (!fingerprint.toUpperCase().startsWith(prefix)) throw new Error('The GPU fingerprint does not match the requested prefix.');
+    const publicBytes = rawPacket(packet).writeForHash(4) as Uint8Array<ArrayBuffer>;
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-1', publicBytes));
+    const hex = [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    if (hex !== fingerprint) throw new Error('The GPU fingerprint does not match an independent SHA-1 digest of the key packet.');
+    return { role, packet, fingerprint };
+}
 
-                fingerprintDataWithoutHeader = (vanitySubkey ? keypair.publicKey.subkeys[0] : keypair.publicKey).keyPacket.write() as Uint8Array<ArrayBuffer>;
-                // console.log('Initial key:');
-                // console.log(keypair.privateKey.armor());
-                // console.log(keypair.publicKey.armor());
-                // console.log('Fingerprint:', keypair.publicKey.getFingerprint());
-                // console.log(keypair.privateKey.keyPacket.created.getTime() / 1e3, (keypair.privateKey.keyPacket.created.getTime() / 1e3).toString(16));
+export async function searchVanityPacket(options: VanitySearchOptions): Promise<VanityCandidate | undefined> {
+    const prefix = options.prefix.replace(/\s+/g, '').toUpperCase();
+    if (!/^[0-9A-F]{1,40}$/.test(prefix)) throw new Error('A vanity prefix must be 1 to 40 hexadecimal characters.');
+    const window = { ...options.window };
+    for (const bound of [window.start, window.end]) {
+        if (!Number.isInteger(bound) || bound < 0 || bound > 0xffffffff) throw new Error('Search window bounds must be whole uint32 seconds.');
+    }
+    if (window.start > window.end) throw new Error('The search window start must not be later than its end.');
+    const { role, signal, onProgress, threads, iterations } = options;
+    for (const [label, value] of [['GPU thread count', threads], ['GPU iteration count', iterations]] as const) {
+        if (!Number.isSafeInteger(value) || value < 1) throw new Error(`${label} must be a positive safe integer.`);
+    }
 
-                if (!initialized) {
-                    fingerprintData = new Uint8Array(fingerprintDataWithoutHeader.length + 3);
-                    fingerprintData[0] = 0x99;
+    const windowLength = window.end - window.start + 1;
+    const side = Math.ceil(Math.sqrt(Math.min(threads, windowLength)));
+    const canvas = new OffscreenCanvas(1, 1);
+    const gl = canvas.getContext('webgl2');
+    if (!gl) throw new Error('Vanity search needs WebGL2 with an integer framebuffer; this browser could not create a WebGL2 context.');
+    const viewportLimit = gl.getParameter(gl.MAX_VIEWPORT_DIMS) as Int32Array;
+    const limit = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE) as number, gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) as number, viewportLimit[0], viewportLimit[1]);
+    if (side > limit) {
+        gl.getExtension('WEBGL_lose_context')?.loseContext();
+        throw new Error(`A ${side}x${side} search canvas for ${threads} threads exceeds the device limit of ${limit} pixels per side. Lower the thread count.`);
+    }
+    canvas.width = side;
+    canvas.height = side;
 
-                    hashData = new ArrayBuffer(Math.ceil((fingerprintData.length + 1 + 8) / 64) * 64);
-                    hashDataU8 = new Uint8Array(hashData);
-                    hashDataU32 = new Uint32Array(hashData);
+    const capacity = side * side;
+    const maxBatch = Math.min(capacity * iterations, 0xffffffff - capacity + 1);
+    const requestedPrefix = prefixMask(prefix);
 
-                    const vs = gl.createShader(gl.VERTEX_SHADER)!;
-                    const fs = gl.createShader(gl.FRAGMENT_SHADER)!;
-                    gl.shaderSource(vs, vshaderString);
-                    gl.shaderSource(fs, fshaderString.replaceAll('#define __INJECTS__', Object.entries({
-                        'FILTER(h)': filter,
-                        LENGTH: hashDataU32.length,
-                    }).map(([k, v]) => `#define ${k} (${v})`).join('\n')));
-                    gl.compileShader(vs);
-                    gl.compileShader(fs);
-                    program = gl.createProgram()!;
-                    gl.attachShader(program, vs);
-                    gl.attachShader(program, fs);
-                    gl.linkProgram(program);
-                    gl.useProgram(program);
-                    gl.uniform1ui(gl.getUniformLocation(program!, 'width')!, canvas.width);
-                    gl.uniform1ui(gl.getUniformLocation(program!, 'height')!, canvas.height);
-                    gl.uniform1ui(gl.getUniformLocation(program!, 'iteration')!, iteration);
-                    hashDataLocation = gl.getUniformLocation(program!, 'hashData')!;
+    let contextLost = false;
+    const onContextLost = () => { contextLost = true; };
+    canvas.addEventListener('webglcontextlost', onContextLost);
 
-                    const ppos = gl.getAttribLocation(program, 'pos');
-                    gl.enableVertexAttribArray(ppos);
-                    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-                    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-                        -1, -1,
-                         1, -1,
-                        -1,  1,
-                        -1,  1,
-                         1, -1,
-                         1,  1,
-                    ]), gl.STATIC_DRAW);
-                    gl.vertexAttribPointer(ppos, 2, gl.FLOAT, false, 0, 0);
+    const compile = (type: number, source: string): WebGLShader => {
+        const shader = gl.createShader(type);
+        if (!shader) throw new Error('Unable to create a WebGL shader object.');
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            const log = gl.getShaderInfoLog(shader) ?? 'no shader info log';
+            gl.deleteShader(shader);
+            throw new Error(`WebGL shader compilation failed: ${log}`);
+        }
+        return shader;
+    };
 
-                    gl.clearColor(0, 0, 0, 0);
-                    gl.clear(gl.COLOR_BUFFER_BIT);
-
-                    initialized = true;
-                }
-
-                // 准备计算密钥指纹的数据：
-                // 09 + 大端序uint16 public-key packet长度 + public-key packet（从version开始的部分）
-                // reference request - How to generate fingerprint for PGP public key - Cryptography Stack Exchange
-                // https://crypto.stackexchange.com/questions/32087
-                fingerprintData.set(
-                    [
-                        (fingerprintDataWithoutHeader.length >> 8) & 0xFF,
-                        (fingerprintDataWithoutHeader.length     ) & 0xFF,
-                    ],
-                    1,
-                );
-                fingerprintData.set(fingerprintDataWithoutHeader, 3);
-                // console.log(fingerprintData);
-                // console.log(Array.from(fingerprintData).map(e => e.toString(16).padStart(2, '0')).join(''));
-
-                // 手动进行SHA-1的填充
-                // 1是数据开始填充的0x80，8是结束填充的数据长度（以bit而不是byte为单位）
-                // 先清空0x80所在的uint32，其他部分长度不变，都会被覆盖的
-                hashDataU32[fingerprintData.length >> 2] = 0;
-                hashDataU8.set(fingerprintData);
-                hashDataU8[fingerprintData.length] = 0x80;
-                // 输入的数据是按大端序排列的01 02 03 04
-                // 对应到SHA-1输入的word/uint32就是0x01020304
-                // 但是这个uint32在小端序下应该是04 03 02 01
-                // 所以需要转换字节序
-                for (let i = 0; i < hashDataU32.length; i++) hashDataU32[i] = swap32(hashDataU32[i]);
-                hashDataU32[hashDataU32.length - 1] = fingerprintData.length * 8;
-                gl.uniform1uiv(hashDataLocation!, hashDataU32);
-                // console.log(hashDataU8);
-                // console.log(Array.from(hashDataU8).map(e => e.toString(16).padStart(2, '0')).join(''));
-                // console.log(hashDataU32);
-                // console.log(Array.from(hashDataU32).map(e => e.toString(16).padStart(8, '0')).join(' '));
-
-                // 修改后密钥的UNIX时间戳
-                let timestamp: number = 0;
-
-                // 用两个三角形重绘整个画布就相当于触发使用GPU进行的计算了
-                // 对于每个密钥来说
-                // 一共有thread个像素，每个像素尝试计算iteration个时间戳
-                // 第0轮期间，第0个像素计算t-0……第thread-1个像素计算t-(thread-1)
-                // 第1轮期间，第0个像素计算t-thread-0……第thread-1个像素计算t-thread-(thread-1)
-                // 第iteration-1轮期间，第0个像素计算t-thread*(iteration-1)-0……第thread-1个像素计算t-thread*(iteration-1)-(thread-1)
-                // 一共会计算thread*iteration个时间戳
-
-                gl.drawArrays(gl.TRIANGLES, 0, 6);
-                gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, resultDataU8);
-                for (let i = 0; i < resultDataU32.length; i++) {
-                    if (resultDataU32[i]) {
-                        // 目标时间戳是0x01020304
-                        // 大端序下应该是04 03 02 01
-                        // 写入顺序是RGBA
-                        // 所以在shader那边输出的应该是R=0x04 G=0x03 B=0x02 A=0x01
-                        timestamp = resultDataU32[i];
-                        // console.log('Found:', i, timestamp, timestamp.toString(16));
-                        // console.log(resultDataU32);
-                        break;
-                    }
-                }
-
-                hashCount += Math.min(Math.floor(Date.now() / 1000), size * size * iteration);
-                progressCallback(hashCount, performance.now() - startTime);
-
-                if (timestamp) {
-                    resolve(await editPrivateKeyCreationTime(keypair.privateKey, new Date(timestamp * 1000)));
-                    // console.log([0x99, 0x00, 0x33, ...vanityKeypair.publicKey.keyPacket.write()].map(e => e.toString(16).padStart(2, '0')).join(''));
-                } else if (checkAbort(hashCount, performance.now() - startTime)) {
-                    resolve(undefined);
-                } else {
-                    setTimeout(run, 0);
-                }
-            } catch (err) {
-                reject(err);
+    const createGpu = (wordCount: number): GpuState => {
+        if (wordCount < 16 || wordCount % 16 !== 0) throw new Error('Unexpected hashed key packet length.');
+        const cleanup: Array<() => void> = [];
+        try {
+            const vertexShader = compile(gl.VERTEX_SHADER, vshaderString);
+            cleanup.push(() => gl.deleteShader(vertexShader));
+            const fragmentShader = compile(gl.FRAGMENT_SHADER, fshaderString.replace('#define __INJECTS__', `#define LENGTH (${wordCount})\n#define BLOCKS (${wordCount / 16})`));
+            cleanup.push(() => gl.deleteShader(fragmentShader));
+            const program = gl.createProgram();
+            if (!program) throw new Error('Unable to create a WebGL program object.');
+            cleanup.push(() => gl.deleteProgram(program));
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                throw new Error(`WebGL program link failed: ${gl.getProgramInfoLog(program) ?? 'no program info log'}`);
             }
-        };
-        // 使用setTimeout防止死循环卡死主线程
-        setTimeout(run, 0);
-    });
-};
+            gl.useProgram(program);
+
+            const uniform = (name: string): WebGLUniformLocation => {
+                const found = gl.getUniformLocation(program, name);
+                if (!found) throw new Error(`WebGL uniform ${name} is missing from the compiled search shader.`);
+                return found;
+            };
+            gl.uniform1ui(uniform('width'), side);
+            gl.uniform1ui(uniform('height'), side);
+            const iteration = uniform('iteration');
+            const batchEnd = uniform('batchEnd');
+            const batchCount = uniform('batchCount');
+            const hashData = uniform('hashData');
+            const prefixWordCount = uniform('prefixWordCount');
+            const prefixWords = uniform('prefixWord');
+            const prefixMasks = uniform('prefixMask');
+
+            const positionBuffer = gl.createBuffer();
+            if (!positionBuffer) throw new Error('Unable to create a WebGL buffer object.');
+            cleanup.push(() => gl.deleteBuffer(positionBuffer));
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+                -1, -1,
+                 1, -1,
+                -1,  1,
+                -1,  1,
+                 1, -1,
+                 1,  1,
+            ]), gl.STATIC_DRAW);
+            const position = gl.getAttribLocation(program, 'pos');
+            if (position < 0) throw new Error('The search vertex shader has no position attribute.');
+            gl.enableVertexAttribArray(position);
+            gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+
+            const texture = gl.createTexture();
+            if (!texture) throw new Error('Unable to create a WebGL texture object.');
+            cleanup.push(() => gl.deleteTexture(texture));
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32UI, side, side, 0, gl.RGBA_INTEGER, gl.UNSIGNED_INT, null);
+
+            const framebuffer = gl.createFramebuffer();
+            if (!framebuffer) throw new Error('Unable to create a WebGL framebuffer object.');
+            cleanup.push(() => gl.deleteFramebuffer(framebuffer));
+            gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+            const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+            if (status !== gl.FRAMEBUFFER_COMPLETE) throw new Error(`The integer framebuffer for the search is incomplete (0x${status.toString(16)}).`);
+            gl.viewport(0, 0, side, side);
+
+            return {
+                program,
+                vertexShader,
+                fragmentShader,
+                positionBuffer,
+                texture,
+                framebuffer,
+                iteration,
+                batchEnd,
+                batchCount,
+                hashData,
+                prefixWordCount,
+                prefixWords,
+                prefixMasks,
+                readback: new Uint32Array(capacity * 4),
+            };
+        } catch (error) {
+            for (const undo of cleanup.reverse()) undo();
+            throw error;
+        }
+    };
+
+    let gpu: GpuState | undefined;
+    let compiledWords = 0;
+    const release = () => {
+        if (!gpu) return;
+        const state = gpu;
+        gpu = undefined;
+        gl.deleteProgram(state.program);
+        gl.deleteShader(state.vertexShader);
+        gl.deleteShader(state.fragmentShader);
+        gl.deleteBuffer(state.positionBuffer);
+        gl.deleteTexture(state.texture);
+        gl.deleteFramebuffer(state.framebuffer);
+    };
+
+    const applyPrefix = (state: GpuState, mask: PrefixMask) => {
+        gl.uniform1ui(state.prefixWordCount, mask.wordCount);
+        gl.uniform1uiv(state.prefixWords, mask.words);
+        gl.uniform1uiv(state.prefixMasks, mask.masks);
+    };
+
+    // Runs one batch and returns the highest timestamp that matched plus the
+    // number of SHA-1 evaluations the pixels actually performed.
+    const runBatch = (state: GpuState, batchEnd: number, count: number): { timestamp: number; attempts: number } => {
+        gl.uniform1ui(state.iteration, Math.ceil(count / capacity));
+        gl.uniform1ui(state.batchEnd, batchEnd);
+        gl.uniform1ui(state.batchCount, count);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        if (contextLost || gl.isContextLost()) throw new Error('Lost the WebGL context during the vanity search.');
+        gl.readPixels(0, 0, side, side, gl.RGBA_INTEGER, gl.UNSIGNED_INT, state.readback);
+        let timestamp = -1;
+        let attempts = 0;
+        for (let index = 0; index < state.readback.length; index += 4) {
+            attempts += state.readback[index + 2];
+            if (state.readback[index] === 1 && state.readback[index + 1] > timestamp) timestamp = state.readback[index + 1];
+        }
+        return { timestamp, attempts };
+    };
+
+    const startTime = performance.now();
+    let hashes = 0;
+    let materials = 0;
+    let sinceYield = startTime;
+    let selfChecked = false;
+    let current: SecretPacket | undefined;
+
+    try {
+        for (;;) {
+            if (signal.aborted) return undefined;
+            const candidate = await generateCandidate(role, new Date(window.end * 1000));
+            const packet = candidate.packet;
+            current = packet;
+            materials += 1;
+
+            const words = hashWords(packet);
+            if (gpu && words.length !== compiledWords) throw new Error('Key material changed the hashed packet length during a search.');
+            const state = gpu ?? createGpu(words.length);
+            gpu = state;
+            compiledWords = words.length;
+            gl.uniform1uiv(state.hashData, words);
+
+            // One off probe that is not part of the statistics: the CPU knows the
+            // full fingerprint of this material, the GPU must reproduce it for the
+            // single second already spent, through the same filter path.
+            if (!selfChecked) {
+                applyPrefix(state, prefixMask(packet.getFingerprint().toUpperCase()));
+                const probe = runBatch(state, window.end, 1);
+                if (probe.timestamp !== window.end || probe.attempts !== 1) {
+                    throw new Error(`GPU self-check failed: expected creation time ${window.end} from 1 attempt, got ${probe.timestamp} from ${probe.attempts} attempts.`);
+                }
+                selfChecked = true;
+            }
+            applyPrefix(state, requestedPrefix);
+
+            let batchEnd = window.end;
+            let remaining = windowLength;
+            let hit = -1;
+            while (remaining > 0) {
+                if (signal.aborted) return undefined;
+                const count = Math.min(remaining, maxBatch);
+                const batch = runBatch(state, batchEnd, count);
+                hashes += batch.attempts;
+                remaining -= count;
+                batchEnd -= count;
+                onProgress?.({ hashes, materials, elapsedMs: performance.now() - startTime });
+                if (batch.timestamp >= 0) {
+                    hit = batch.timestamp;
+                    break;
+                }
+                if (performance.now() - sinceYield >= YIELD_INTERVAL_MS) {
+                    await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+                    sinceYield = performance.now();
+                }
+            }
+
+            if (hit >= 0) {
+                if (signal.aborted) return undefined;
+                const verified = await verifyCandidate(role, packet, hit, prefix, window);
+                if (signal.aborted) return undefined;
+                current = undefined;
+                return verified;
+            }
+
+            rawPacket(packet).clearPrivateParams();
+            current = undefined;
+        }
+    } finally {
+        if (current) rawPacket(current).clearPrivateParams();
+        canvas.removeEventListener('webglcontextlost', onContextLost);
+        release();
+        gl.getExtension('WEBGL_lose_context')?.loseContext();
+    }
+}

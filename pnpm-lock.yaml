@@ -16,9 +16,6 @@ importers:
 
   .:
     dependencies:
-      '@gera2ld/tarjs':
-        specifier: ^0.3.1
-        version: 0.3.1
       openpgp:
         specifier: 6.3.0
         version: 6.3.0(patch_hash=2e31eee2e76b6d79e296496ac078902c78ed02798c61eb391f12f9b02ac2153c)
@@ -32,9 +29,6 @@ importers:
       '@types/node':
         specifier: ^25.0.3
         version: 25.9.9
-      '@types/wicg-file-system-access':
-        specifier: ^2023.10.7
-        version: 2023.10.7
       rollup-plugin-visualizer:
         specifier: ^6.0.5
         version: 6.0.11(rollup@4.64.6)
@@ -49,10 +43,6 @@ importers:
         version: 3.2.2(vite@7.3.7(@types/node@25.9.9)(terser@5.51.2))
 
 packages:
-
-  '@babel/runtime@7.29.10':
-    resolution: {integrity: sha512-NpugTzbKgGrNe45Ui32cN8vCFFMxVtP/9rtfwv0nP5FRDAjvYBxJcLVpYA9mr1jxP6cnIT7x9LUzuDTbWYYNRA==}
-    engines: {node: '>=6.9.0'}
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -209,9 +199,6 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
-
-  '@gera2ld/tarjs@0.3.1':
-    resolution: {integrity: sha512-ygcXngovMTj+zI3j2ZSjGiIziELuSCfk5tjUHBjUL/9/9dPLzIdNefW5cZZopB67Di/j/6H9BCGp/0o45qRefQ==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -381,9 +368,6 @@ packages:
 
   '@types/node@25.9.9':
     resolution: {integrity: sha512-b4e2xxj/yMeT2hNlD6x7zNFiQK2Dlmkb9CQ6v3/1G2RezKN4YS2lcEv8lzGm1mhs4f2lM4yNAMI/zUDBZBBt7w==}
-
-  '@types/wicg-file-system-access@2023.10.7':
-    resolution: {integrity: sha512-g49ijasEJvCd7ifmAY2D0wdEtt1xRjBbA33PJTiv8mKBr7DoMsPeISoJ8oQOTopSRi+FBWPpPW5ouDj2QPKtGA==}
 
   acorn@8.19.0:
     resolution: {integrity: sha512-oJlA3XiRm7Cyk6qFD2Jn8ak9B7jSy0qy00ADO3+8dpT0LSjFihQYv4C02LFCSYJV3Q37xYwwRy5m+IpIiUzqWw==}
@@ -812,8 +796,6 @@ packages:
 
 snapshots:
 
-  '@babel/runtime@7.29.10': {}
-
   '@esbuild/aix-ppc64@0.28.2':
     optional: true
 
@@ -891,10 +873,6 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.2':
     optional: true
-
-  '@gera2ld/tarjs@0.3.1':
-    dependencies:
-      '@babel/runtime': 7.29.10
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
@@ -1015,8 +993,6 @@ snapshots:
   '@types/node@25.9.9':
     dependencies:
       undici-types: 7.24.6
-
-  '@types/wicg-file-system-access@2023.10.7': {}
 
   acorn@8.19.0: {}
 
