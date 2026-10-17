@@ -1,6 +1,6 @@
 import type { Locale } from './i18n/messages.ts';
 
-export type ThemeMode = 'auto' | 'macchiato' | 'mocha';
+export type ThemeMode = 'auto' | 'latte' | 'mocha';
 export type ComputePreset = 'auto' | 'fast' | 'light' | 'custom';
 export type ViewZone = 'local' | 'utc';
 
@@ -43,7 +43,7 @@ export const defaultPreferences: Preferences = {
 };
 
 const locales: readonly string[] = ['zh-CN', 'en'];
-const themes: readonly string[] = ['auto', 'macchiato', 'mocha'];
+const themes: readonly string[] = ['auto', 'latte', 'mocha'];
 const presets: readonly string[] = ['auto', 'fast', 'light', 'custom'];
 const zones: readonly string[] = ['local', 'utc'];
 
@@ -62,7 +62,8 @@ export function normalizePreferences(input: unknown): Preferences {
     return {
         version: 1,
         locale: pick(locales, source.locale, defaultPreferences.locale),
-        theme: pick(themes, source.theme, defaultPreferences.theme),
+        // v1 temporarily shipped the wrong light flavor name; migrate it.
+        theme: source.theme === 'macchiato' ? 'latte' : pick(themes, source.theme, defaultPreferences.theme),
         viewZone: pick(zones, source.viewZone, defaultPreferences.viewZone),
         computePreset: pick(presets, source.computePreset, defaultPreferences.computePreset),
         threads: positiveInteger(source.threads, defaultPreferences.threads),

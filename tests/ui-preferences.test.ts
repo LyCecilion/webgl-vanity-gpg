@@ -37,6 +37,12 @@ test('invalid preference payloads fall back to safe defaults', () => {
     assert.deepEqual(normalized, defaultPreferences);
 });
 
+test('the legacy Macchiato preference migrates to Latte', () => {
+    assert.equal(normalizePreferences({ theme: 'macchiato' }).theme, 'latte');
+    assert.equal(normalizePreferences({ theme: 'latte' }).theme, 'latte');
+    assert.equal(normalizePreferences({ theme: 'mocha' }).theme, 'mocha');
+});
+
 test('valid preferences round-trip through storage and unknown keys are dropped', () => {
     const storage = fakeStorage();
     const preferences: Preferences = {

@@ -14,7 +14,7 @@ const { t } = useI18n();
 
 const themes = computed(() => ([
     { value: 'auto', label: t('theme.auto') },
-    { value: 'macchiato', label: t('theme.macchiato') },
+    { value: 'latte', label: t('theme.latte') },
     { value: 'mocha', label: t('theme.mocha') },
 ] as const));
 

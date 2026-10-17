@@ -55,8 +55,8 @@ export const zhCN = {
 
     'theme.label': '外观',
     'theme.auto': '跟随系统',
-    'theme.autoHint': '根据系统深浅色设置自动选择 Macchiato 或 Mocha。',
-    'theme.macchiato': 'Macchiato',
+    'theme.autoHint': '根据系统深浅色设置自动选择 Latte 或 Mocha。',
+    'theme.latte': 'Latte',
     'theme.mocha': 'Mocha',
     'theme.toggle': '切换明暗主题',
 
@@ -523,8 +523,8 @@ export const en = {
 
     'theme.label': 'Appearance',
     'theme.auto': 'System',
-    'theme.autoHint': 'Follow the system color scheme and switch between Macchiato and Mocha.',
-    'theme.macchiato': 'Macchiato',
+    'theme.autoHint': 'Follow the system color scheme and switch between Latte and Mocha.',
+    'theme.latte': 'Latte',
     'theme.mocha': 'Mocha',
     'theme.toggle': 'Toggle theme',
 
