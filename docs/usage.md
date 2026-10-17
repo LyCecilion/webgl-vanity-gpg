@@ -36,7 +36,7 @@ The application has one central object: the current certificate.
   *Extend expiration*, *Export*, *Import / replace* and *Clear certificate*.
 - **Top bar:** primary fingerprint copy chip, backup badge (`Not backed up` /
   `Backed up` / `Device key`), theme toggle, help, settings.
-- **Settings:** theme (system / Macchiato / Mocha), language (简体中文 / English),
+- **Settings:** theme (system / Latte / Mocha), language (简体中文 / English),
   display time zone, default compute preset and measured GPU rate, success
   sound, and reset of non-sensitive preferences.
 

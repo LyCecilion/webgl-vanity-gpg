@@ -8,12 +8,11 @@ The palette is based on [Catppuccin](https://catppuccin.com/):
 
 | Mode | Flavor | Role |
 | --- | --- | --- |
-| Light | **Macchiato** | Lighter of the two dark flavors, used for the “light” mode |
-| Dark | **Mocha** | Darkest flavor, used for the “dark” mode |
-| System | Auto | Follows `prefers-color-scheme` |
+| Light | **Latte** | Official light Catppuccin palette |
+| Dark | **Mocha** | Official dark Catppuccin palette |
+| System | Auto | Follows `prefers-color-scheme` (light → Latte, dark → Mocha) |
 
-Both flavors are dark by nature; Macchiato is selected for light mode per the
-project's visual direction. The theme is applied with
+The theme is applied with
 `document.documentElement.dataset.theme`, and the top bar exposes a quick
 toggle. The preference is persisted.
 
@@ -142,7 +141,7 @@ Stored in `localStorage` under `webgl-vanity-gpg.preferences.v1`:
 type Preferences = {
     version: 1;
     locale: 'zh-CN' | 'en';
-    theme: 'auto' | 'macchiato' | 'mocha';
+    theme: 'auto' | 'latte' | 'mocha';
     viewZone: 'local' | 'utc';
     computePreset: 'auto' | 'fast' | 'light' | 'custom';
     threads: number;
@@ -153,7 +152,8 @@ type Preferences = {
 ```
 
 Unknown or invalid values are normalized to defaults; storage failures never
-break the page. Keys, passphrases, and certificate data are never added to this
+break the page. A short-lived v1 build stored the light mode as `macchiato`;
+that value is migrated to `latte` on load. Keys, passphrases, and certificate data are never added to this
 object. Settings offers a reset that removes the entry.
 
 ## Internationalization

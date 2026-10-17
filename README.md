@@ -40,7 +40,7 @@ This is the LyCecilion fork of
 The original project was a GPU vanity key generator; this fork keeps the
 GPU SHA-1 search engine and rebuilds the interface as a local key lifecycle
 tool (Vue 3 + TypeScript + Vite, Chinese/English interface, Catppuccin
-Macchiato/Mocha themes).
+Latte/Mocha themes).
 
 ## License
 
