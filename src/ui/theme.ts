@@ -1,4 +1,5 @@
 import { computed, ref, watchEffect } from 'vue';
+import { prefersReducedMotion } from './browser.ts';
 import { preferences } from './preferences.ts';
 import type { ThemeMode } from './preferences-core.ts';
 
@@ -16,11 +17,26 @@ export const resolvedTheme = computed<ResolvedTheme>(() => {
     return systemPrefersDark.value ? 'mocha' : 'latte';
 });
 
+let currentTheme: ResolvedTheme | undefined;
+let themeTimer: number | undefined;
+
 export function applyTheme(theme: ResolvedTheme): void {
-    document.documentElement.dataset.theme = theme;
+    const root = document.documentElement;
+    const changed = currentTheme !== undefined && currentTheme !== theme;
+    currentTheme = theme;
+    root.dataset.theme = theme;
     // Keep native form controls, scrollbars and the document color scheme in
     // sync with the selected Catppuccin flavor: Latte is light, Mocha is dark.
-    document.documentElement.style.colorScheme = theme === 'mocha' ? 'dark' : 'light';
+    root.style.colorScheme = theme === 'mocha' ? 'dark' : 'light';
+    if (!changed || prefersReducedMotion()) return;
+    // Briefly opt every surface into a color transition; this avoids animating
+    // unrelated layout properties and keeps the first paint instant.
+    root.classList.add('theme-transition');
+    window.clearTimeout(themeTimer);
+    themeTimer = window.setTimeout(() => {
+        themeTimer = undefined;
+        root.classList.remove('theme-transition');
+    }, 300);
 }
 
 export function setThemeMode(mode: ThemeMode): void {

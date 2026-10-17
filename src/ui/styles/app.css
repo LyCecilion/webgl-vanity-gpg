@@ -453,6 +453,7 @@ hr {
     border-radius: var(--radius-md);
     background: var(--color-bg-mantle);
     font-size: var(--text-sm);
+    animation: banner-in var(--motion-slow) var(--ease-out) both;
 }
 
 .banner + .banner {
@@ -1193,11 +1194,17 @@ hr {
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--color-text-subtle);
+    transition: color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
 }
 
 .copy-btn:hover {
     background: var(--color-surface);
     color: var(--color-text);
+}
+
+.copy-btn--copied {
+    color: var(--color-success);
+    animation: copy-pop var(--motion-base) var(--ease-out);
 }
 
 /* Empty state ------------------------------------------------------------ */
@@ -1448,10 +1455,21 @@ hr {
 }
 
 .meter__fill {
+    position: relative;
     height: 100%;
+    overflow: hidden;
     border-radius: inherit;
     background: linear-gradient(90deg, var(--color-accent), var(--color-success));
     transition: width var(--transition-slow);
+}
+
+.meter__fill::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ctp-text) 32%, transparent), transparent);
+    transform: translateX(-100%);
+    animation: meter-shimmer 1.8s var(--ease-in-out) infinite;
 }
 
 .progress__window {
@@ -1619,6 +1637,7 @@ hr {
 
 .segmented__option {
     padding: 4px 0.7rem;
+    transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
     border: 0;
     border-radius: var(--radius-full);
     background: transparent;
@@ -1634,6 +1653,7 @@ hr {
 .segmented__option--active {
     background: var(--color-accent);
     color: var(--color-accent-contrast);
+    animation: pill-pop var(--motion-fast) var(--ease-out);
 }
 
 .help__section + .help__section {
@@ -1764,14 +1784,6 @@ kbd {
     box-shadow: var(--shadow-md);
     font-size: var(--text-sm);
     pointer-events: auto;
-    animation: toast-in var(--transition-slow) both;
-}
-
-@keyframes toast-in {
-    from {
-        transform: translateY(0.5rem);
-        opacity: 0;
-    }
 }
 
 .toast--success {
@@ -1843,6 +1855,7 @@ kbd {
 }
 
 .result__icon {
+    position: relative;
     display: grid;
     width: 2.75rem;
     height: 2.75rem;
@@ -1851,6 +1864,17 @@ kbd {
     background: color-mix(in srgb, var(--color-success) 16%, transparent);
     color: var(--color-success);
     flex: 0 0 auto;
+    animation: success-pop var(--motion-slow) var(--ease-out) both;
+}
+
+.result__icon::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border: 1px solid var(--color-success);
+    border-radius: 50%;
+    opacity: 0;
+    animation: success-ring 720ms var(--ease-out) 120ms both;
 }
 
 .result__fingerprint {
@@ -2025,6 +2049,227 @@ kbd {
     }
 }
 
+/* Motion ----------------------------------------------------------------- */
+
+@keyframes view-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+}
+
+@keyframes view-out {
+    to {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+}
+
+.view-enter-active {
+    animation: view-in var(--motion-slow) var(--ease-out) both;
+}
+
+.view-leave-active {
+    animation: view-out var(--motion-fast) var(--ease-in) both;
+}
+
+@keyframes dialog-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.985);
+    }
+}
+
+@keyframes dialog-out {
+    to {
+        opacity: 0;
+        transform: translateY(6px) scale(0.99);
+    }
+}
+
+@keyframes backdrop-in {
+    from {
+        opacity: 0;
+    }
+}
+
+@keyframes backdrop-out {
+    to {
+        opacity: 0;
+    }
+}
+
+.dialog[open] {
+    animation: dialog-in var(--motion-base) var(--ease-out) both;
+}
+
+.dialog[open]::backdrop {
+    animation: backdrop-in var(--motion-base) var(--ease-out) both;
+}
+
+.dialog.dialog--closing {
+    pointer-events: none;
+    animation: dialog-out var(--motion-fast) var(--ease-in) both;
+}
+
+.dialog.dialog--closing::backdrop {
+    animation: backdrop-out var(--motion-fast) var(--ease-in) both;
+}
+
+@keyframes banner-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+}
+
+@keyframes step-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+}
+
+@keyframes step-out {
+    to {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+}
+
+.step-enter-active {
+    animation: step-in var(--motion-base) var(--ease-out) both;
+}
+
+.step-leave-active {
+    animation: step-out var(--motion-fast) var(--ease-in) both;
+}
+
+@keyframes key-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+}
+
+@keyframes key-out {
+    to {
+        opacity: 0;
+        transform: scale(0.98);
+    }
+}
+
+.key-enter-active {
+    animation: key-in var(--motion-slow) var(--ease-out) both;
+    animation-delay: calc(var(--key-index, 0) * 45ms);
+}
+
+.key-leave-active {
+    animation: key-out var(--motion-fast) var(--ease-in) both;
+}
+
+.key-move {
+    transition: transform var(--motion-base) var(--ease-out);
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+    }
+}
+
+@keyframes toast-out {
+    to {
+        opacity: 0;
+        transform: translateX(14px) scale(0.98);
+    }
+}
+
+.toast-enter-active {
+    animation: toast-in var(--motion-slow) var(--ease-out) both;
+}
+
+.toast-leave-active {
+    animation: toast-out var(--motion-fast) var(--ease-in) both;
+}
+
+.toast-move {
+    transition: transform var(--motion-base) var(--ease-out);
+}
+
+@keyframes pill-pop {
+    0% {
+        transform: scale(0.94);
+    }
+    60% {
+        transform: scale(1.03);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+@keyframes copy-pop {
+    0% {
+        transform: scale(0.8);
+    }
+    60% {
+        transform: scale(1.12);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+@keyframes success-pop {
+    0% {
+        opacity: 0;
+        transform: scale(0.72);
+    }
+    60% {
+        transform: scale(1.06);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes success-ring {
+    0% {
+        opacity: 0.55;
+        transform: scale(0.85);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(1.55);
+    }
+}
+
+@keyframes meter-shimmer {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(100%);
+    }
+}
+
+/* Theme changes fade colors on every surface for a moment. Layout properties
+   are deliberately excluded so nothing jumps. */
+html.theme-transition,
+html.theme-transition body,
+html.theme-transition body * {
+    transition:
+        background-color 220ms var(--ease-in-out),
+        color 220ms var(--ease-in-out),
+        border-color 220ms var(--ease-in-out),
+        box-shadow 220ms var(--ease-in-out),
+        fill 220ms var(--ease-in-out),
+        stroke 220ms var(--ease-in-out) !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -2151,4 +2396,19 @@ body.dialog-open {
     margin-top: var(--space-4);
     color: var(--color-text-muted);
     font-size: var(--text-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html.theme-transition,
+    html.theme-transition body,
+    html.theme-transition body * {
+        transition: none !important;
+    }
+
+    .dialog[open],
+    .dialog[open]::backdrop,
+    .dialog.dialog--closing,
+    .dialog.dialog--closing::backdrop {
+        animation: none !important;
+    }
 }

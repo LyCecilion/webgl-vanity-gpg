@@ -197,6 +197,8 @@ function start(): void {
             </div>
 
             <div class="wizard__body">
+                <Transition name="step" mode="out-in">
+                    <div :key="step" class="wizard__step-panel">
                 <template v-if="step === 0">
                     <fieldset class="fieldset">
                         <legend class="fieldset__legend">{{ t('create.uidLabel') }}</legend>
@@ -287,6 +289,8 @@ function start(): void {
                         </div>
                     </div>
                 </template>
+                    </div>
+                </Transition>
             </div>
         </div>
 

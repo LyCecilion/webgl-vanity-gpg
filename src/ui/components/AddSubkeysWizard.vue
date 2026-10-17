@@ -193,6 +193,8 @@ async function start(): Promise<void> {
             </div>
 
             <div class="wizard__body">
+                <Transition name="step" mode="out-in">
+                    <div :key="step" class="wizard__step-panel">
                 <template v-if="step === 0">
                     <div class="grid-2">
                         <div class="field">
@@ -284,6 +286,8 @@ async function start(): Promise<void> {
                         </div>
                     </div>
                 </template>
+                    </div>
+                </Transition>
             </div>
         </div>
 
