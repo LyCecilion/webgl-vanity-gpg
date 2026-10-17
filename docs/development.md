@@ -115,11 +115,20 @@ use a separate real-GPU smoke job.
 
 ## CI
 
-`.github/workflows/build.yml` is unchanged from upstream: it builds on pushes to
-`master`, downloads `shader_minifier`, deploys `dist/` to GitHub Pages, and
-uploads the bundle visualizer report. It does not run tests and does not cover
-`develop`. Update the branch filters and add `pnpm test` before publishing this
-frontend from a fork.
+`.github/workflows/build.yml` (workflow name `ci`) now mirrors the rewritten
+stack:
+
+- Runs on pull requests targeting `master`, on pushes to `master`/`develop`, and
+  on manual dispatch.
+- Verify job: pnpm 10.11.0, Node 24, `pnpm install --frozen-lockfile`, a GnuPG
+  check, `pnpm test` (engine + GnuPG + UI suites), and `pnpm run build`
+  (including `vue-tsc`). It uploads `stats.html` and `dist/` artifacts.
+- `shader_minifier` is downloaded on a best-effort basis; a missing release
+  asset only produces the existing build warning, it does not fail verification.
+- Deploy job: only for pushes to `master`. It runs with `contents: write`,
+  downloads the verified `dist` artifact, and publishes it to `gh-pages`. The
+  verify job keeps a read-only token, and pull requests cannot deploy.
+- Superseded runs on the same ref are cancelled via a concurrency group.
 
 ## Performance work
 
