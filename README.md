@@ -1,42 +1,47 @@
 # webgl-vanity-gpg
 
-使用 GPU（WebGL）快速生成带有“靓号”的 PGP 密钥！
+A localhost-only WebGL vanity OpenPGP key lifecycle manager. Search for an Ed25519
+primary key whose fingerprint starts with a chosen prefix, then add
+signing/encryption subkeys, extend expirations, and export device keys that only
+contain selected subkey secrets.
 
-“靓号”指的是带有连号等特定格式的密钥指纹或 ID（例如以 `77777777` 结尾），具体介绍和生成原理请参见：
+The application runs entirely in the browser, sends no network requests, and
+never stores keys or passphrases. It is designed for local use at
+`http://127.0.0.1:4173/` and can operate offline after the first build.
 
-* [一位 PGP 进步青年的科学算号实践](https://www.douban.com/note/763978955/)
-* [某科学的 PGP 算号指南](https://blog.dejavu.moe/posts/the-scientific-vanity-pgp-counting-guide/)
+## Quick start
 
-![](https://github.com/user-attachments/assets/e6364d93-fffe-4fcd-9857-b70155e6f476)
+Requires Node 24, pnpm 10.11.0 and a browser with WebGL2 integer framebuffer
+support. Running the behavior tests additionally requires GnuPG ≥ 2.4.
 
-简单来说，密钥指纹是密钥生效时间和公钥内容的 SHA-1，通过不断生成密钥和修改时间（成本更低）的暴力遍历方式找到“靓号”。
+```sh
+pnpm install --frozen-lockfile
+pnpm test
+pnpm run build
+pnpm run preview -- --port 4173
+```
 
-目前速度最快的算号工具，例如使用 CPU 的 [RedL0tus/VanityGPG](https://github.com/RedL0tus/VanityGPG) 和使用 GPU 的 [cuihaoleo/gpg-fingerprint-filter-gpu](https://github.com/cuihaoleo/gpg-fingerprint-filter-gpu)，都只能在 Linux 下运行，后者还需要准备 CUDA 环境。但是我是 Windows 用户，又觉得开虚拟机跑 VanityGPG 太慢了，更没有多余的显卡拿去直通给虚拟机，所以就写了这个。
+Open <http://127.0.0.1:4173/>. For development use
+`pnpm run dev -- --port 5173`.
 
-能在浏览器上运行的话那应该就方便多了！(๑•̀ᄇ•́)و ✧
+## Documentation
 
-## 类似工具和性能对比
+- [Documentation index](docs/README.md)
+- [Usage guide](docs/usage.md) — workflows, defaults, GnuPG commands
+- [Architecture](docs/architecture.md) — modules, data model, state machine
+- [Security](docs/security.md) — threat model and safety boundaries
+- [UI design](docs/ui.md) — Catppuccin themes, responsive rules, i18n, preferences
+- [Development](docs/development.md) — tests, build, verification, conventions
 
-| Repo | 计算方式 | 速度（hash/s） | 注释 |
-| - | - | - | - |
-| [Erriy/gpg_awesome_keyid](https://github.com/Erriy/gpg_awesome_keyid) | CPU | 17k | i5-5200U x4 |
-| [nc7s/g3k](https://github.com/nc7s/g3k) | CPU | 430k | M1 Pro x8 |
-| [RedL0tus/VanityGPG](https://github.com/RedL0tus/VanityGPG) | CPU | 120m | Ryzen 7 3700x x16 |
-| [lachesis/scallion](https://github.com/lachesis/scallion) | GPU |  | 仅支持 RSA，已停止更新 |
-| [Victrid/memorable-pgpgen](https://github.com/Victrid/memorable-pgpgen) | GPU |  | 没有给出速度 |
-| [cuihaoleo/gpg-fingerprint-filter-gpu](https://github.com/cuihaoleo/gpg-fingerprint-filter-gpu) | GPU | 10b | RTX 3090 数据来自“算号指南” |
-| 这个项目 | GPU | 1b | Radeon 680M |
-| 这个项目 | GPU | 2b | GTX 1070 |
-| 这个项目 | GPU | 7b | RTX A5500 |
-| 这个项目 | GPU | 7b | Radeon RX 7700 XT |
+## Status
 
-以上的速度均为生成 Curve25519 类型的密钥的速度。
+This is the LyCecilion fork of
+[TransparentLC/webgl-vanity-gpg](https://github.com/TransparentLC/webgl-vanity-gpg).
+The original project was a GPU vanity key generator; this fork keeps the
+GPU SHA-1 search engine and rebuilds the interface as a local key lifecycle
+tool (Vue 3 + TypeScript + Vite, Chinese/English interface, Catppuccin
+Latte/Mocha themes).
 
-## 合并主密钥和子密钥
+## License
 
-这个工具在生成密钥时只能保证主密钥和子密钥**其中之一**的指纹为“靓号”。如果你希望生成主密钥和子密钥的指纹都是“靓号”的密钥：
-
-1. 生成主密钥为“靓号”的私钥 A。
-2. 生成子密钥为“靓号”的私钥 B（需要勾选“将格式应用到子密钥而不是主密钥上”）。
-3. 点击“把不同密钥的“靓号”合并到一起！”，粘贴私钥 A 和私钥 B，然后保存合并后的私钥。
-4. 导入新的私钥后，自行使用 `gpg --edit-key` 编辑私钥。
+[GNU Affero General Public License v3.0](LICENSE).
