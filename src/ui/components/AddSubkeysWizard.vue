@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { expectedHashes, expectedMaterials } from '../difficulty.ts';
 import { friendlyError, uiError } from '../errors.ts';
 import { formatHashes } from '../format.ts';
@@ -30,13 +30,13 @@ const errorDetail = ref('');
 const signing = ref(1);
 const encryption = ref(false);
 const prefix = ref('4217');
-const windowValue = reactive<TimeWindowValue>(defaultTimeWindow(preferences.viewZone, 'today'));
-const expiry = reactive<ExpiryValue>(defaultExpiry(windowValue.zone, 365));
+const windowValue = ref<TimeWindowValue>(defaultTimeWindow(preferences.viewZone, 'today'));
+const expiry = ref<ExpiryValue>(defaultExpiry(windowValue.value.zone, 365));
 const primaryPassphrase = ref('');
 const passphrase = ref('');
 const confirmation = ref('');
 const allowUnprotected = ref(false);
-const compute = reactive<ComputeValue>({
+const compute = ref<ComputeValue>({
     preset: preferences.computePreset,
     threads: preferences.threads,
     iterations: preferences.iterations,
@@ -48,20 +48,20 @@ const primaryProtected = computed(() => certificate.rows[0]?.secret === 'protect
 const reviewWindow = computed(() => {
     try {
         const now = new Date();
-        const range = resolveWindow(windowValue, now, primaryCreated.value);
-        return describeWindow(range, windowValue.zone, now, primaryCreated.value, locale.value);
+        const range = resolveWindow(windowValue.value, now, primaryCreated.value);
+        return describeWindow(range, windowValue.value.zone, now, primaryCreated.value, locale.value);
     } catch {
         return '';
     }
 });
 
 const count = computed(() => Math.max(0, Math.trunc(Number(signing.value) || 0)) + (encryption.value ? 1 : 0));
-const reviewExpiry = computed(() => expiry.mode === 'never' ? t('create.expiryNever') : expiry.date);
+const reviewExpiry = computed(() => expiry.value.mode === 'never' ? t('create.expiryNever') : expiry.value.date);
 
 const windowInfo = computed(() => {
     try {
         const now = new Date();
-        const range = resolveWindow(windowValue, now, primaryCreated.value);
+        const range = resolveWindow(windowValue.value, now, primaryCreated.value);
         return { range, length: range.end - range.start + 1 };
     } catch {
         return null;
@@ -86,14 +86,14 @@ function validateStep(index: number): boolean {
             validatePrefix(prefix.value);
         } else if (index === 1) {
             const now = new Date();
-            resolveWindow(windowValue, now, primaryCreated.value);
-            const expiresAt = expiresAtFrom(expiry, windowValue.zone);
+            resolveWindow(windowValue.value, now, primaryCreated.value);
+            const expiresAt = expiresAtFrom(expiry.value, windowValue.value.zone);
             if (expiresAt && expiresAt.getTime() <= now.getTime()) throw uiError('error.expiryPast');
         } else if (index === 2) {
             if (primaryProtected.value && !primaryPassphrase.value) throw uiError('error.passphraseRequired');
             validateProtection(passphrase.value, confirmation.value, allowUnprotected.value);
-            if (!Number.isSafeInteger(compute.threads) || compute.threads <= 0) throw uiError('error.positiveInteger');
-            if (!Number.isSafeInteger(compute.iterations) || compute.iterations <= 0) throw uiError('error.positiveInteger');
+            if (!Number.isSafeInteger(compute.value.threads) || compute.value.threads <= 0) throw uiError('error.positiveInteger');
+            if (!Number.isSafeInteger(compute.value.iterations) || compute.value.iterations <= 0) throw uiError('error.positiveInteger');
         }
         return true;
     } catch (caught) {
@@ -130,8 +130,8 @@ async function start(): Promise<void> {
     let range;
     let windowText: string;
     try {
-        range = resolveWindow(windowValue, now, primaryCreated.value);
-        windowText = describeWindow(range, windowValue.zone, now, primaryCreated.value, locale.value);
+        range = resolveWindow(windowValue.value, now, primaryCreated.value);
+        windowText = describeWindow(range, windowValue.value.zone, now, primaryCreated.value, locale.value);
     } catch (caught) {
         const friendly = friendlyError(caught, locale.value);
         error.value = friendly.message;
@@ -139,7 +139,7 @@ async function start(): Promise<void> {
         step.value = 1;
         return;
     }
-    const expiresAt = expiresAtFrom(expiry, windowValue.zone);
+    const expiresAt = expiresAtFrom(expiry.value, windowValue.value.zone);
     const protection = validateProtection(passphrase.value, confirmation.value, allowUnprotected.value);
     const estimate = materialEstimate.value;
     if (estimate && windowInfo.value && (estimate.materials > 512 || windowInfo.value.length < 60)) {
@@ -161,8 +161,8 @@ async function start(): Promise<void> {
         expiresAt,
         primaryPassphrase: primaryPassphrase.value,
         protection,
-        threads: compute.threads,
-        iterations: compute.iterations,
+        threads: compute.value.threads,
+        iterations: compute.value.iterations,
     };
     closeDialog();
     void addSubkeys(request);

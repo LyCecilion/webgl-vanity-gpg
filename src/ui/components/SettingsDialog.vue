@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import pkg from '../../../package.json';
 import { useI18n } from '../i18n/index.ts';
+import { computePreferencePatch } from '../preferences-core.ts';
 import { preferences, resetPreferences, updatePreferences } from '../preferences.ts';
 import type { ThemeMode, ViewZone } from '../preferences-core.ts';
 import { askConfirmation, pushToast } from '../store.ts';
@@ -35,7 +36,7 @@ const compute = computed<ComputeValue>(() => ({
 }));
 
 function setCompute(value: ComputeValue): void {
-    updatePreferences(value);
+    updatePreferences(computePreferencePatch(value));
 }
 
 async function reset(): Promise<void> {

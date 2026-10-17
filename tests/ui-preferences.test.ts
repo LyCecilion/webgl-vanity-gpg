@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
     AUTO_COMPUTE,
     clearPreferences,
+    computePreferencePatch,
     computeValues,
     defaultPreferences,
     loadPreferences,
@@ -74,6 +75,14 @@ test('storage failures never throw', () => {
     assert.doesNotThrow(() => savePreferences(broken, defaultPreferences));
     assert.doesNotThrow(() => clearPreferences(broken));
     assert.deepEqual(loadPreferences(undefined), defaultPreferences);
+});
+
+test('the UI compute model maps to preference keys', () => {
+    assert.deepEqual(computePreferencePatch({ preset: 'fast', threads: 131_072, iterations: 8 }), {
+        computePreset: 'fast',
+        threads: 131_072,
+        iterations: 8,
+    });
 });
 
 test('compute presets resolve to concrete values', () => {
