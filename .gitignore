@@ -29,3 +29,9 @@ yarn.lock
 stats.html
 
 shader_minifier.exe
+.omp
+.pnpm-store/
+.pnpm-cache/
+.pnpm-home/
+.npm-cache/
+.tmp-smoke/

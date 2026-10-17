@@ -14,11 +14,15 @@
     "moduleDetection": "force",
     "noEmit": true,
 
+    /* Vue SFC support */
+    "jsx": "preserve",
+    "types": ["vite/client", "node"],
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue"]
 }
