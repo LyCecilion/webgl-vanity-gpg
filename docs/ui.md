@@ -169,6 +169,35 @@ object. Settings offers a reset that removes the entry.
   `YYYY-MM-DD HH:mm:ss` in the selected zone (local or UTC), independent of the
   UI language.
 
+## Motion
+
+Motion is intentionally short and functional: it explains a state change and
+never delays a cryptographic operation. Durations are `120ms` (fast), `180ms`
+(base) and `280ms` (slow), with decelerating easing for entrances and
+accelerating easing for exits.
+
+- **Dialogs:** fade/scale in with a backdrop fade. Closing adds
+  `dialog--closing` and the store delays unmount by 170 ms so the exit animation
+  can play; the delay is cancelled if another dialog opens.
+- **Views:** the empty state and dashboard cross-fade when a certificate is
+  loaded or cleared.
+- **Wizards:** step panels use an `out-in` fade/slide so the form content and
+  review step do not pop abruptly.
+- **Keys and toasts:** newly added subkey cards enter with a 45 ms stagger;
+  toasts have enter, leave, and move animations.
+- **Feedback:** copy buttons pop on success, the result check has a pop plus an
+  expanding ring, banners drop in, and the active segmented-control pill pops
+  when the selection moves.
+- **Theme:** toggling flavors briefly add a `theme-transition` class that
+  cross-fades color, border, shadow, fill, and stroke for 220 ms.
+- **Progress:** the probability meter keeps its width transition and adds a
+  subtle shimmer while a search is running.
+
+`prefers-reduced-motion: reduce` disables all animations and transitions,
+closes dialogs immediately, skips the theme cross-fade, and explicitly disables
+the native-dialog pseudo-element animations. No separate in-app motion setting
+is needed.
+
 ## Accessibility
 
 - Semantic landmarks, skip link, labelled form fields, labelled icon buttons.
