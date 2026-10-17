@@ -1,14 +1,18 @@
 # webgl-vanity-gpg
 
-仅在 localhost 运行、可离线使用的 WebGL 靓号 OpenPGP 密钥生命周期工具。默认搜索 `4A2E117A` 前缀的 Ed25519 **仅认证 [C] 主钥**，然后独立追加 `4217` 前缀的 Ed25519 **签名 [S] 子钥**和可选的 Curve25519 **加密 [E] 子钥**。主钥作为长期身份锚点；子钥可以在主钥投入使用后按设备添加，不要求年度轮换。
+A localhost-only WebGL vanity OpenPGP key lifecycle manager. Search for an Ed25519
+primary key whose fingerprint starts with a chosen prefix, then add
+signing/encryption subkeys, extend expirations, and export device keys that only
+contain selected subkey secrets.
 
-v4 指纹是公钥包及其创建时间的 SHA-1。搜索只生成未绑定的单个密钥包，在明确的创建时间区间内枚举时间戳；区间耗尽后更换随机密钥材料，不扩大日期。秘密材料不传给 GPU，命中结果必须经独立 CPU SHA-1 校验才会签发。靓号前缀不能代替完整指纹的身份核对。
+The application runs entirely in the browser, sends no network requests, and
+never stores keys or passphrases. It is designed for local use at
+`http://127.0.0.1:4173/` and can operate offline after the first build.
 
-生成原理参考原项目的 [科学算号实践](https://www.douban.com/note/763978955/) 与 [算号指南](https://blog.dejavu.moe/posts/the-scientific-vanity-pgp-counting-guide/)。这些是普通外链，页面不会自动访问。
+## Quick start
 
-## 本地启动与离线使用
-
-需要 Node 24、pnpm 10.11.0，以及支持 WebGL2 整数 framebuffer 的浏览器。行为测试另需 GnuPG ≥ 2.4。
+Requires Node 24, pnpm 10.11.0 and a browser with WebGL2 integer framebuffer
+support. Running the behavior tests additionally requires GnuPG ≥ 2.4.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -17,63 +21,27 @@ pnpm run build
 pnpm run preview -- --port 4173
 ```
 
-打开 `http://127.0.0.1:4173/`。开发模式使用 `pnpm run dev -- --port 5173`。两个服务默认只监听 `127.0.0.1`；没有后端密钥处理。首次准备依赖需要网络，已构建的 `dist` 在本地服务保持运行时可断网使用，不要直接用 `file://` 打开页面。
+Open <http://127.0.0.1:4173/>. For development use
+`pnpm run dev -- --port 5173`.
 
-OpenPGP.js 固定为 6.3.0，petite-vue 固定为 0.4.1，保留现有 pnpm 补丁与锁文件。可选的 `shader_minifier` 未安装时构建会提示警告，但无需下载它即可运行。
+## Documentation
 
-## 网页工作流
+- [Documentation index](docs/README.md)
+- [Usage guide](docs/usage.md) — workflows, defaults, GnuPG commands
+- [Architecture](docs/architecture.md) — modules, data model, state machine
+- [Security](docs/security.md) — threat model and safety boundaries
+- [UI design](docs/ui.md) — Catppuccin themes, responsive rules, i18n, preferences
+- [Development](docs/development.md) — tests, build, verification, conventions
 
-1. **创建主钥**：添加真实用户 ID，选择前缀、自然日/区间与时区，设置保护口令并确认。主钥默认永不过期，只含 [C]，不会顺带生成子钥。主钥搜索默认前缀为 `4A2E117A`。
-2. **导入私钥**：选择 `.asc` 文件或粘贴一份完整私钥。支持 v4 Ed25519Legacy 主钥；不支持的算法、公开证书、多主钥或非法输入会明确报错并保留当前证书。设备私钥也可导入查看；缺少主钥秘密材料时不能追加或续期。
-3. **添加子钥**：签名数量默认 1，可以为 0；加密子钥默认不选，一次最多一把。共同前缀默认 `4217`，创建时间默认任务启动当天，有效期可指定或明确设为永不过期。输入原主钥口令与新子钥保护口令。整批按 S 后 E 搜索，全部成功才发布；停止或任何失败都不发布半成品。
-4. **延长有效期**：按完整指纹选择有限期的主钥/子钥，指定更晚的到期日期或改为永不过期。保留指纹、密钥材料和原始创建时间，不重新算号。已撤销目标不可续期；主钥只有生命周期已过期时仍可先续期，再追加子钥。
-5. **导出**：明确区分公钥、完整私钥备份与设备私钥。设备导出选择具体子钥，填写设备名称和新的设备保护口令；名称只影响文件名，不是受签名保护或持久化的设备标签。
+## Status
 
-新建、追加和续期都会显示未备份提醒。完整备份包含全部现有秘密材料；下载发起后提醒仍保留，必须在确认文件已保存后点击 **「确认备份已保存」** 才解除。只导出公钥或设备文件不能代替完整备份。未确认备份时替换证书或离开页面会请求确认；拒绝、失败操作或取消搜索都不会把证书标记为已备份。
+This is the LyCecilion fork of
+[TransparentLC/webgl-vanity-gpg](https://github.com/TransparentLC/webgl-vanity-gpg).
+The original project was a GPU vanity key generator; this fork keeps the
+GPU SHA-1 search engine and rebuilds the interface as a local key lifecycle
+tool (Vue 3 + TypeScript + Vite, Chinese/English interface, Catppuccin
+Macchiato/Mocha themes).
 
-## 时间与搜索参数
+## License
 
-创建时间支持指定自然日、任务启动当天和自定义闭区间，时区明确选择本机或 UTC。网页显示日期、时区及实际冻结区间，区分自然日与向前滚动的 24 小时。
-
-任务启动时冻结区间，排除未来秒；子钥还排除早于主钥创建时间的秒。跨午夜不会改用新一天。空区间、反向区间和完全未来的日期在启动 GPU 前报错，不扩展到其他日期。本机自然日按相邻午夜计算，兼容夏令时 23/25 小时日，拒绝不存在的日期或本地时刻。自定义区间包含两端，可搜索单秒，包括 Unix 时间戳 0。
-
-到期日期表示该日全天可用，在所选时区下一日零点失效；创建时间与签发时间不是同一个时间。
-
-线程数与迭代数只决定 GPU 批次，不决定密钥生日。默认线程数 65536、迭代数 8；窄区间缩小实际 GPU 工作量。进度显示当前角色、完成数量、随机材料数、实际 SHA-1 尝试次数和总耗时，不把未运行的像素或提前命中后跳过的迭代计入吞吐量。取消与失败释放 GPU 资源；不隐式退回 CPU 搜索。
-
-## 证书签发与续期 API
-
-`src/key-lifecycle.ts` 提供可独立执行的生命周期 API：先创建 v4 Ed25519 **仅认证 [C]** 主钥，再向已投入使用的主钥追加独立的 Ed25519 [S] 或 Curve25519 [E] 子钥。签名子钥带有可验证的交叉认证；新自认证只声明 GnuPG 支持的 AES、SHA-512/SHA-256 和压缩偏好。
-
-`KeyDocument.bytes` 是导入及导出的权威来源，语义解析对象仅用于验证和签发。追加和续期只插入新包，保留原指纹、密钥材料、创建时间、UID、历史认证、撤销和未知非关键包；旧 EOF 不定长末包仅规范化包头以免吞掉新增包。公开导出仅替换秘密包，不包含秘密材料。
-
-续期接受完整指纹，不允许缩短期限或复活已撤销的密钥。仅密钥生命周期已到期时仍可续期；签名自身无效或已到期不算可续期身份。有效签名子钥交叉认证可复用，只需主钥口令；失效交叉认证需要相应子钥材料与口令。非空保护口令始终加密，空口令仅在明确允许未加密时接受。
-
-`node --experimental-strip-types --test tests/key-lifecycle.test.ts` 使用真实 OpenPGP.js 和隔离的 GnuPG 临时 keyring 验证签名、解密、历史包保留、期限与失败原子性，不使用个人 GnuPG 配置。
-
-## 设备私钥的权限范围
-
-`src/device-export.ts` 的 `exportDeviceKey` 保留完整公开身份与签名历史，但主钥和所有未选子钥使用 GNU dummy 秘密包，仅所选子钥带有实际秘密材料。选中项按设备新口令重新保护；已撤销、已过期或没有秘密材料的子钥不能供新设备导出。操作使用独立解析副本，不改变完整备份。
-
-生命周期测试在全新的设备 GnuPG keyring 中检查实际 `private-keys-v1.d` 文件集合恰等于所选子钥的 keygrips，并验证所选 S 签名、所选 E 解密成功、错误口令和主钥/未选 S 操作失败。公开证书和设备文件都不是完整私钥备份。
-
-## 安全边界
-
-- 密钥和口令仅用于当前页面操作，不写入 localStorage、sessionStorage 或 IndexedDB。刷新后需重新导入；没有遥测、通知服务、自动远端图片或自动私钥下载。
-- 下载由显式点击触发，本地 Blob URL 使用后释放。保护口令默认必须非空并确认；只有明确勾选允许未加密时才接受空口令。非空口令始终加密。
-- 操作结束后清空口令输入，并清理独立工作副本和未发布候选的私密参数；这不等于能够安全擦除 JavaScript 字符串或保证浏览器内存取证不可恢复。
-- 完整备份应离线妥善保管，不应直接分发到设备。浏览器、扩展和操作系统必须可信；localhost 和断网不提供硬件隔离。
-- GPU/CPU 校验不一致、WebGL 不支持、着色器错误或 context loss 会报错，不签发未经校验的结果。成功提示音默认关闭，只有显式勾选才播放。
-
-## 实际验收与性能观察
-
-2026-10-15 本地 Chromium 的 renderer 为 `ANGLE (AMD, AMD Radeon 780M Graphics (radeonsi phoenix ACO), OpenGL ES 3.2)`，不是软件 SwiftShader。生产版只放行 loopback 网络，实际完成创建、导入、追加、续期和三种导出；HTTP 请求 host 只有 `127.0.0.1`，存储为空，未观察到私钥或口令进入 console。
-
-| 生产版搜索场景 | 实际 hash 次数 | 材料数 | 界面总耗时（秒） |
-| - | -: | -: | -: |
-| `4A2E117A` 主钥，UTC 2026-10-13 完整 86400 秒自然日 | 4330368000 | 50120 | 88.33 |
-| `4217` 两把 S + 一把 E，UTC 当天冻结的 59781 秒区间 | 179343 | 3 | 0.35 |
-
-第二组从点击开始到发起完整备份下载实测为 605 ms，包含表单操作与签发/保护/导出，不是纯 GPU 吞吐量。随机命中时间有很大方差；这些是一次实际观察，不是固定 ETA，也不能与旧版整套钥生成的历史性能数字直接比较。
-
-完整日窗主钥经独立 SHA-1 与隔离 GnuPG 确认为 [C]；网页生成的 S/E 经 GnuPG 实际签名/解密验证。追加保留原包，选定 S/E 和独立有限期主钥的网页续期保留指纹与创建时间；设备文件只产生所选两把子钥的秘密文件。日期边界、时间戳 0、取消后重启、错误口令、未确认备份和缺少主钥秘密材料路径均已实际验收。
+[GNU Affero General Public License v3.0](LICENSE).
