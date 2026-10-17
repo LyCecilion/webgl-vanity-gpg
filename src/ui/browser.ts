@@ -1,5 +1,9 @@
 /** Small browser-only helpers. They are never imported by the Node test suites. */
 
+export function prefersReducedMotion(): boolean {
+    return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 export async function sha256Hex(data: Uint8Array | string): Promise<string> {
     const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
     // A fresh view guarantees an ArrayBuffer-backed source for SubtleCrypto.

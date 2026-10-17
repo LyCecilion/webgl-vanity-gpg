@@ -16,17 +16,23 @@ const emit = defineEmits<{ details: [fingerprint: string]; renew: [fingerprint: 
                 @renew="emit('renew', $event)"
                 @device="emit('device', $event)"
             />
-            <div v-if="rows.length > 1" class="key-card__children">
+            <TransitionGroup
+                v-if="rows.length > 1"
+                name="key"
+                tag="div"
+                class="key-card__children"
+            >
                 <KeyCard
-                    v-for="row in rows.slice(1)"
+                    v-for="(row, index) in rows.slice(1)"
                     :key="row.fingerprint"
+                    :style="{ '--key-index': index }"
                     :row="row"
                     :uids="[]"
                     @details="emit('details', $event)"
                     @renew="emit('renew', $event)"
                     @device="emit('device', $event)"
                 />
-            </div>
+            </TransitionGroup>
         </template>
     </div>
 </template>

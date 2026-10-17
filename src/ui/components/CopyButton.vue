@@ -25,6 +25,7 @@ async function copy(): Promise<void> {
     <button
         type="button"
         class="copy-btn"
+        :class="{ 'copy-btn--copied': copied }"
         :aria-label="copied ? copiedLabel : label"
         :title="copied ? copiedLabel : label"
         @click.stop="copy"

@@ -62,8 +62,10 @@ onBeforeUnmount(() => {
         <a class="skip-link" href="#main-content">{{ t('app.skipToContent') }}</a>
         <AppTopBar />
         <main id="main-content" class="app-main">
-            <DashboardView v-if="hasDocument" />
-            <EmptyState v-else />
+            <Transition name="view" mode="out-in">
+                <DashboardView v-if="hasDocument" key="dashboard" />
+                <EmptyState v-else key="empty" />
+            </Transition>
         </main>
         <footer class="app-footer">
             <p>{{ t('app.footerNote') }}</p>

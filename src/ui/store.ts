@@ -3,6 +3,7 @@ import { enums } from 'openpgp';
 import type { AlgorithmInfo, PrivateKey, SignaturePacket, Subkey } from 'openpgp';
 import { fullConfig } from '../openpgp-packets.ts';
 import type { KeyDocument } from '../key-document.ts';
+import { prefersReducedMotion } from './browser.ts';
 import { friendlyError } from './errors.ts';
 import type { FriendlyError } from './errors.ts';
 import { translate } from './i18n/translate.ts';
@@ -126,13 +127,44 @@ export const ui = reactive({
     renewPreselect: [] as string[],
 });
 
+let closeTimer: number | undefined;
+let closeSequence = 0;
+
 export function openDialog(dialog: DialogName): void {
+    // A pending animated close must not clear the dialog that is opening next.
+    closeSequence++;
+    if (closeTimer !== undefined) {
+        window.clearTimeout(closeTimer);
+        closeTimer = undefined;
+    }
     ui.dialog = dialog;
 }
 
+/**
+ * Close the active dialog with a short exit animation. Native <dialog> stays in
+ * the top layer while the closing class plays; the component unmounts after the
+ * animation so BaseDialog can call dialog.close().
+ */
 export function closeDialog(): void {
-    ui.dialog = null;
-    ui.detailFingerprint = '';
+    if (ui.dialog === null) return;
+    const dialog = document.querySelector<HTMLDialogElement>('dialog.dialog[open]');
+    const finish = (): void => {
+        ui.dialog = null;
+        ui.detailFingerprint = '';
+    };
+    if (!dialog || prefersReducedMotion()) {
+        finish();
+        return;
+    }
+    const sequence = ++closeSequence;
+    dialog.classList.add('dialog--closing');
+    window.clearTimeout(closeTimer);
+    closeTimer = window.setTimeout(() => {
+        closeTimer = undefined;
+        if (sequence !== closeSequence) return;
+        dialog.classList.remove('dialog--closing');
+        finish();
+    }, 170);
 }
 
 export function openExportDialog(tab: 'public' | 'backup' | 'device', preselect: readonly string[] = []): void {
