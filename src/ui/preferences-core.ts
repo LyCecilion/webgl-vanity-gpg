@@ -30,6 +30,15 @@ export const COMPUTE_PRESETS: Readonly<Record<Exclude<ComputePreset, 'auto' | 'c
 
 export const AUTO_COMPUTE = { threads: 65536, iterations: 8 } as const;
 
+/** Map the UI compute model (preset/threads/iterations) to preference keys. */
+export function computePreferencePatch(value: {
+    preset: ComputePreset;
+    threads: number;
+    iterations: number;
+}): Pick<Preferences, 'computePreset' | 'threads' | 'iterations'> {
+    return { computePreset: value.preset, threads: value.threads, iterations: value.iterations };
+}
+
 export const defaultPreferences: Preferences = {
     version: 1,
     locale: 'zh-CN',

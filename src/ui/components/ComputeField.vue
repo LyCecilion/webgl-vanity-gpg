@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import { formatRate } from '../format.ts';
 import { useI18n } from '../i18n/index.ts';
 import { benchmarkGpu } from '../operations.ts';
-import { AUTO_COMPUTE, COMPUTE_PRESETS } from '../preferences-core.ts';
+import { AUTO_COMPUTE, COMPUTE_PRESETS, computePreferencePatch } from '../preferences-core.ts';
 import type { ComputePreset } from '../preferences-core.ts';
 import { preferences, updatePreferences } from '../preferences.ts';
 import { operation, pushToast, toastError } from '../store.ts';
@@ -29,7 +29,7 @@ const rateText = computed(() => preferences.measuredRate
 
 function apply(next: ComputeValue): void {
     emit('update:modelValue', next);
-    updatePreferences(next);
+    updatePreferences(computePreferencePatch(next));
 }
 
 function setPreset(preset: ComputePreset): void {
