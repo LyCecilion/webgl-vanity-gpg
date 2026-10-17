@@ -31,17 +31,17 @@ const userIDs = ref<UserID[]>([]);
 const uidInput = reactive<UserID>({ name: '', comment: '', email: '' });
 
 const prefix = ref('4A2E117A');
-const windowValue = reactive<TimeWindowValue>({
+const windowValue = ref<TimeWindowValue>({
     ...defaultTimeWindow(preferences.viewZone, 'day'),
     // Backdate the primary by one day by default so an immediate subkey
     // operation still has a full-day creation window available.
     date: formatDateInput(Date.now() - 86_400_000, preferences.viewZone),
 });
-const expiry = reactive<ExpiryValue>({ mode: 'never', date: '' });
+const expiry = ref<ExpiryValue>({ mode: 'never', date: '' });
 const passphrase = ref('');
 const confirmation = ref('');
 const allowUnprotected = ref(false);
-const compute = reactive<ComputeValue>({
+const compute = ref<ComputeValue>({
     preset: preferences.computePreset,
     threads: preferences.threads,
     iterations: preferences.iterations,
@@ -59,16 +59,16 @@ const expected = computed(() => {
 const reviewWindow = computed(() => {
     try {
         const now = new Date();
-        const range = resolveWindow(windowValue, now);
-        return describeWindow(range, windowValue.zone, now, undefined, locale.value);
+        const range = resolveWindow(windowValue.value, now);
+        return describeWindow(range, windowValue.value.zone, now, undefined, locale.value);
     } catch {
         return '';
     }
 });
 
 const reviewExpiry = computed(() => {
-    if (expiry.mode === 'never') return t('create.expiryNever');
-    return expiry.date;
+    if (expiry.value.mode === 'never') return t('create.expiryNever');
+    return expiry.value.date;
 });
 
 function formatUserID(uid: UserID): string {
@@ -108,13 +108,13 @@ function validateStep(index: number): boolean {
         } else if (index === 1) {
             validatePrefix(prefix.value);
             const now = new Date();
-            resolveWindow(windowValue, now);
-            const expiresAt = expiresAtFrom(expiry, windowValue.zone);
+            resolveWindow(windowValue.value, now);
+            const expiresAt = expiresAtFrom(expiry.value, windowValue.value.zone);
             if (expiresAt && expiresAt.getTime() <= now.getTime()) throw uiError('error.expiryPast');
         } else if (index === 2) {
             validateProtection(passphrase.value, confirmation.value, allowUnprotected.value);
-            if (!Number.isSafeInteger(compute.threads) || compute.threads <= 0) throw uiError('error.positiveInteger');
-            if (!Number.isSafeInteger(compute.iterations) || compute.iterations <= 0) throw uiError('error.positiveInteger');
+            if (!Number.isSafeInteger(compute.value.threads) || compute.value.threads <= 0) throw uiError('error.positiveInteger');
+            if (!Number.isSafeInteger(compute.value.iterations) || compute.value.iterations <= 0) throw uiError('error.positiveInteger');
         }
         return true;
     } catch (caught) {
@@ -147,8 +147,8 @@ function start(): void {
     let range;
     let windowText: string;
     try {
-        range = resolveWindow(windowValue, now);
-        windowText = describeWindow(range, windowValue.zone, now, undefined, locale.value);
+        range = resolveWindow(windowValue.value, now);
+        windowText = describeWindow(range, windowValue.value.zone, now, undefined, locale.value);
     } catch (caught) {
         const friendly = friendlyError(caught, locale.value);
         error.value = friendly.message;
@@ -156,7 +156,7 @@ function start(): void {
         step.value = 1;
         return;
     }
-    const expiresAt = expiresAtFrom(expiry, windowValue.zone);
+    const expiresAt = expiresAtFrom(expiry.value, windowValue.value.zone);
     const protection = validateProtection(passphrase.value, confirmation.value, allowUnprotected.value);
     const identities = userIDs.value.map(uid => ({ ...uid }));
     closeDialog();
@@ -167,8 +167,8 @@ function start(): void {
         windowText,
         expiresAt,
         protection,
-        threads: compute.threads,
-        iterations: compute.iterations,
+        threads: compute.value.threads,
+        iterations: compute.value.iterations,
     });
 }
 </script>
