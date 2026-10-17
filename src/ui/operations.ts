@@ -131,7 +131,10 @@ async function searchTarget(
 ): Promise<VanityCandidate> {
     const signal = operationSignal();
     if (!signal) throw new Error('The search has no cancellation signal.');
-    const expected = expectedHashes(prefix.length);
+    // The operation may search several targets (for example two signing
+    // subkeys). The overlay reports aggregate attempts, so probability must be
+    // measured against the aggregate expected hash count.
+    const expected = expectedHashes(prefix.length) * BigInt(Math.max(1, targetTotal));
     const baseHashes = totals.hashes;
     const baseMaterials = totals.materials;
     const baseElapsed = totals.elapsedMs;

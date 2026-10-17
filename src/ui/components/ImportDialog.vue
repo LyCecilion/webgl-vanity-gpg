@@ -122,8 +122,17 @@ async function confirm(): Promise<void> {
             <Icon name="upload" :size="26" />
             <p class="dropzone__title">{{ t('import.drop') }}</p>
             <p class="dropzone__hint">{{ t('import.dropHint') }}</p>
-            <input id="import-file-input" ref="fileInput" class="sr-only" type="file" accept=".asc,.gpg,.txt,application/pgp-keys" @change="onFileInput">
         </div>
+        <input
+            id="import-file-input"
+            ref="fileInput"
+            class="sr-only"
+            type="file"
+            tabindex="-1"
+            accept=".asc,.gpg,.txt,application/pgp-keys"
+            @click.stop
+            @change="onFileInput"
+        >
         <p v-if="sourceName" class="field__hint mono" style="margin-top: var(--space-2)">{{ sourceName }}</p>
 
         <div class="field" style="margin-top: var(--space-4)">

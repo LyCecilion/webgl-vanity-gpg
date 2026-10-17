@@ -20,9 +20,13 @@ const targetText = computed(() => {
     if (operation.total > 1) return t('progress.target', { current: operation.current, total: operation.total, role });
     return role;
 });
-const expectedText = computed(() => operation.progress.expectedHashes === null
-    ? ''
-    : t('progress.expected', { hashes: formatHashes(operation.progress.expectedHashes) }));
+const expectedText = computed(() => {
+    if (operation.progress.expectedHashes === null) return '';
+    const hashes = formatHashes(operation.progress.expectedHashes);
+    return operation.total > 1
+        ? t('progress.expectedTotal', { hashes })
+        : t('progress.expected', { hashes });
+});
 
 function stop(): void {
     if (stopping.value) return;
